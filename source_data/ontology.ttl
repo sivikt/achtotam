@@ -1,0 +1,162 @@
+@prefix ct:        <https://nesedeknamuose.lt/ontology/cognitive-trails#> .
+@prefix rdf:       <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:      <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:       <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:       <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms:   <http://purl.org/dc/terms/> .
+@prefix foaf:      <http://xmlns.com/foaf/0.1/> .
+@prefix schema:    <https://schema.org/> .
+@prefix geo:       <http://www.w3.org/2003/01/geo/wgs84_pos#> .
+@prefix geosparql: <http://www.opengis.net/ont/geosparql#> .
+
+ct: a owl:Ontology ;
+    dcterms:title "Cognitive Trails Ontology"@en , "Pažintinių takų ontologija"@lt , "Онтология познавательных троп"@ru ;
+    dcterms:description "Hiking / educational trails: geometry, multilingual descriptions, amenities and image depictions. Source: nesedeknamuose.lt"@en ;
+    dcterms:source <https://nesedeknamuose.lt/pazintiniai-takai/> ;
+    owl:versionInfo "2.0" .
+
+ct:Trail a owl:Class ;
+    rdfs:subClassOf schema:Place , geosparql:Feature ;
+    rdfs:label "Trail"@en , "Takas"@lt , "Тропа"@ru .
+
+ct:gpxFile a owl:DatatypeProperty ; rdfs:domain ct:Trail ; rdfs:range xsd:anyURI ;
+    rdfs:label "GPX file"@en , "GPX failas"@lt , "GPX файл"@ru .
+ct:routeType a owl:DatatypeProperty ; rdfs:domain ct:Trail ; rdfs:range rdf:langString ;
+    rdfs:label "route type"@en , "maršruto tipas"@lt , "тип маршрута"@ru .
+
+# --- measured quantities (value + unit) ---
+ct:Quantity a owl:Class ;
+    rdfs:label "Quantity"@en , "Dydis"@lt , "Величина"@ru ;
+    rdfs:comment "A measured value paired with its unit of measure."@en .
+ct:Unit a owl:Class ;
+    rdfs:label "Unit of measure"@en , "Matavimo vienetas"@lt , "Единица измерения"@ru .
+ct:value a owl:DatatypeProperty ; rdfs:domain ct:Quantity ; rdfs:range xsd:decimal ;
+    rdfs:label "value"@en , "reikšmė"@lt , "значение"@ru .
+ct:unit a owl:ObjectProperty ; rdfs:domain ct:Quantity ; rdfs:range ct:Unit ;
+    rdfs:label "unit"@en , "matavimo vienetas"@lt , "единица измерения"@ru .
+ct:distance a owl:ObjectProperty ; rdfs:domain ct:Trail ; rdfs:range ct:Quantity ;
+    rdfs:label "distance"@en , "atstumas"@lt , "расстояние"@ru .
+ct:duration a owl:ObjectProperty ; rdfs:domain ct:Trail ; rdfs:range ct:Quantity ;
+    rdfs:label "duration"@en , "trukmė"@lt , "продолжительность"@ru .
+
+# unit individuals — each carries a multilingual rdfs:label
+ct:unit-km a ct:Unit ;
+    rdfs:label "km"@en , "km"@lt , "км"@ru .
+ct:unit-hour a ct:Unit ;
+    rdfs:label "h"@en , "val."@lt , "ч"@ru .
+
+# --- map / external links ---
+schema:hasMap a owl:ObjectProperty ; rdfs:domain ct:Trail ; rdfs:range xsd:anyURI ;
+    rdfs:label "map view"@en , "žemėlapis"@lt , "карта"@ru ;
+    rdfs:comment "Link that opens the trail location on an external web map (Google Maps)."@en .
+
+ct:TrailProperty a owl:Class ; rdfs:subClassOf owl:DatatypeProperty ;
+    rdfs:label "Trail amenity / accessibility property"@en .
+
+# --- multipart trails: named segments (atkarpos / kilpos) ---
+ct:TrailSegment a owl:Class ;
+    rdfs:subClassOf geosparql:Feature ;
+    rdfs:label "Trail segment"@en , "Tako atkarpa"@lt , "Участок тропы"@ru ;
+    rdfs:comment "A named part of a multipart trail, with its own geometry, gallery and (optionally) description."@en .
+ct:hasSegment a owl:ObjectProperty ; rdfs:domain ct:Trail ; rdfs:range ct:TrailSegment ;
+    rdfs:label "has segment"@en , "turi atkarpą"@lt , "имеет участок"@ru .
+ct:segmentNumber a owl:DatatypeProperty ; rdfs:domain ct:TrailSegment ; rdfs:range xsd:integer ;
+    rdfs:label "segment order"@en , "atkarpos numeris"@lt , "номер участка"@ru .
+
+# --- themed categories (source taxonomy: scenic, barefoot, viewpoints, etc.) ---
+ct:Category a owl:Class ;
+    rdfs:label "Trail category"@en , "Tako kategorija"@lt , "Категория тропы"@ru ;
+    rdfs:comment "A themed grouping a trail belongs to, from the source catalog."@en .
+ct:category a owl:ObjectProperty ; rdfs:domain ct:Trail ; rdfs:range ct:Category ;
+    rdfs:label "category"@en , "kategorija"@lt , "категория"@ru .
+
+ct:asphaltAccess a owl:DatatypeProperty , ct:TrailProperty ;
+    rdfs:domain ct:Trail ; rdfs:range xsd:boolean ;
+    rdfs:label "Asfaltuotas privažiavimas"@lt , "Asphalted access"@en , "Асфальтированный подъезд"@ru .
+
+ct:publicTransportAccess a owl:DatatypeProperty , ct:TrailProperty ;
+    rdfs:domain ct:Trail ; rdfs:range xsd:boolean ;
+    rdfs:label "Galima atvykti visuomeniniu transportu"@lt , "It is possible to arrive by public transport"@en , "Можно приехать на общественном транспорте"@ru .
+
+ct:bathingSpot a owl:DatatypeProperty , ct:TrailProperty ;
+    rdfs:domain ct:Trail ; rdfs:range xsd:boolean ;
+    rdfs:label "Maudymosi vieta"@lt , "Bathing place"@en , "Место для купания"@ru .
+
+ct:restArea a owl:DatatypeProperty , ct:TrailProperty ;
+    rdfs:domain ct:Trail ; rdfs:range xsd:boolean ;
+    rdfs:label "Poilsiavietė"@lt , "Rest area"@en , "Зона отдыха"@ru .
+
+ct:campsite a owl:DatatypeProperty , ct:TrailProperty ;
+    rdfs:domain ct:Trail ; rdfs:range xsd:boolean ;
+    rdfs:label "Stovyklavietė"@lt , "Campsite"@en , "Кемпинг"@ru .
+
+ct:benches a owl:DatatypeProperty , ct:TrailProperty ;
+    rdfs:domain ct:Trail ; rdfs:range xsd:boolean ;
+    rdfs:label "Suoliukai, atokvėpio vietos"@lt , "Benches, resting places"@en , "Скамейки, места для отдыха"@ru .
+
+ct:carPark a owl:DatatypeProperty , ct:TrailProperty ;
+    rdfs:domain ct:Trail ; rdfs:range xsd:boolean ;
+    rdfs:label "Automobilių stovėjimo aikštelė"@lt , "Parking lot"@en , "Парковка"@ru .
+
+ct:viewpoint a owl:DatatypeProperty , ct:TrailProperty ;
+    rdfs:domain ct:Trail ; rdfs:range xsd:boolean ;
+    rdfs:label "Apžvalgos vieta"@lt , "Review location"@en , "Посмотреть местоположение"@ru .
+
+ct:observationTower a owl:DatatypeProperty , ct:TrailProperty ;
+    rdfs:domain ct:Trail ; rdfs:range xsd:boolean ;
+    rdfs:label "Apžvalgos bokštelis"@lt , "Observation tower"@en , "Смотровая башня"@ru .
+
+ct:toilet a owl:DatatypeProperty , ct:TrailProperty ;
+    rdfs:domain ct:Trail ; rdfs:range xsd:boolean ;
+    rdfs:label "Tualetas"@lt , "Toilet"@en , "Туалет"@ru .
+
+ct:steepSlope a owl:DatatypeProperty , ct:TrailProperty ;
+    rdfs:domain ct:Trail ; rdfs:range xsd:boolean ;
+    rdfs:label "Šlaitas ar stati įkalnė"@lt , "Slope or steep hill"@en , "Склон или крутой холм"@ru .
+
+ct:stairs a owl:DatatypeProperty , ct:TrailProperty ;
+    rdfs:domain ct:Trail ; rdfs:range xsd:boolean ;
+    rdfs:label "Laiptai"@lt , "The stairs"@en , "Лестница"@ru .
+
+ct:strollerAccessible a owl:DatatypeProperty , ct:TrailProperty ;
+    rdfs:domain ct:Trail ; rdfs:range xsd:boolean ;
+    rdfs:label "Pravažiuojama vaikišku vežimėliu"@lt , "It is passed by a pram"@en , "Его проезжает коляска"@ru .
+
+ct:refreshments a owl:DatatypeProperty , ct:TrailProperty ;
+    rdfs:domain ct:Trail ; rdfs:range xsd:boolean ;
+    rdfs:label "Gėrimai ir užkandžiai"@lt , "Drinks and snacks"@en , "Напитки и закуски"@ru .
+
+ct:infoBoards a owl:DatatypeProperty , ct:TrailProperty ;
+    rdfs:domain ct:Trail ; rdfs:range xsd:boolean ;
+    rdfs:label "Interaktyvūs informaciniai stendai"@lt , "Interactive information stands"@en , "Интерактивные информационные стенды"@ru .
+
+ct:wheelchairAccessible a owl:DatatypeProperty , ct:TrailProperty ;
+    rdfs:domain ct:Trail ; rdfs:range xsd:boolean ;
+    rdfs:label "Pritaikyta neįgaliesiems"@lt , "Adapted for the disabled"@en , "Адаптирован для инвалидов"@ru .
+
+ct:audioInfo a owl:DatatypeProperty , ct:TrailProperty ;
+    rdfs:domain ct:Trail ; rdfs:range xsd:boolean ;
+    rdfs:label "Audio informacija"@lt , "Audio information"@en , "Аудиоинформация"@ru .
+
+ct:suitableForCycling a owl:DatatypeProperty , ct:TrailProperty ;
+    rdfs:domain ct:Trail ; rdfs:range xsd:boolean ;
+    rdfs:comment "Inferred from the trail's free-text description."@en ;
+    rdfs:label "Tinka dviratininkams"@lt , "Suitable for cyclists"@en , "Подходит для велосипедистов"@ru .
+
+ct:cat-942 a ct:Category ;
+    rdfs:label "Smagiems pasivaikščiojimams"@lt , "For fun walks"@en , "Для веселых прогулок"@ru .
+
+ct:cat-930 a ct:Category ;
+    rdfs:label "Vaizdingi takai"@lt , "Scenic trails"@en , "Живописные тропы"@ru .
+
+ct:cat-938 a ct:Category ;
+    rdfs:label "Teminiai maršrutai"@lt , "Thematic routes"@en , "Тематические маршруты"@ru .
+
+ct:cat-936 a ct:Category ;
+    rdfs:label "Takai su apžvalgos vietomis"@lt , "Trails with viewpoints"@en , "Тропы со смотровыми площадками"@ru .
+
+ct:cat-989 a ct:Category ;
+    rdfs:label "Basų kojų ir pojūčių takai"@lt , "Barefoot and sensory pathways"@en , "Босоногие и сенсорные пути"@ru .
+
+ct:cat-944 a ct:Category ;
+    rdfs:label "Po laukinę gamtą"@lt , "After the wild nature"@en , "После дикой природы"@ru .

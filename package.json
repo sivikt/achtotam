@@ -1,0 +1,30 @@
+{
+  "name": "cognitive-trails",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "description": "Ontology-driven 3D viewer for Lithuanian cognitive trails (source: nesedeknamuose.lt)",
+  "scripts": {
+    "compile:data": "node scripts/compile_ttl.mjs",
+    "predev": "npm run compile:data",
+    "dev": "vite",
+    "prebuild": "npm run compile:data",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "cesium": "^1.118.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "resium": "^1.19.0-beta.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "n3": "^1.17.2",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vite-plugin-cesium": "^1.2.23"
+  }
+}
