@@ -4,7 +4,6 @@ import { trails as allTrails } from "./generated/trails";
 import { I18N } from "./data/i18n";
 import MapView, { type MapHandle } from "./components/MapView";
 import Sidebar, { type SortMode } from "./components/Sidebar";
-import DetailPanel from "./components/DetailPanel";
 import Gallery, { type GalleryItem } from "./components/Gallery";
 import { nameOf, pick, qtyNum } from "./lib/lang";
 import { lineStringsFromWKT } from "./lib/wkt";
@@ -27,6 +26,32 @@ function repPoint(t: Trail): [number, number] | null {
 }
 const trailPoints = new Map(allTrails.map((t) => [t.slug, repPoint(t)] as const));
 
+const LayersIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="12 2 22 8.5 12 15 2 8.5 12 2" />
+    <polyline points="2 15.5 12 22 22 15.5" />
+  </svg>
+);
+
+// Google Maps / Material Design glyphs: framed satellite image, and folded map
+const SatIcon = () => (
+  <svg viewBox="0 0 24 24" fill="currentColor">
+    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM5 4.99h3C8 6.65 6.66 8 5 8V4.99zM5 12v-2c2.76 0 5-2.25 5-5.01h2C12 8.86 8.87 12 5 12zm0 6 3.5-4.5 2.5 3.01L14.5 12l4.5 6H5z" />
+  </svg>
+);
+const RefsIcon = () => (
+  <svg viewBox="0 0 24 24" fill="currentColor">
+    <path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z" />
+  </svg>
+);
+// terrain / contour lines glyph for the topographic layer
+const TopoIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 20l4-7 3 4 3-6 4 9" />
+    <path d="M8 8l2.5-4L14 9" />
+  </svg>
+);
+
 export default function App() {
   const [lang, setLang] = useState<Lang>("en");
   const [search, setSearch] = useState("");
@@ -36,8 +61,10 @@ export default function App() {
   const [attrFilter, setAttrFilter] = useState<Set<string>>(new Set());
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
   const [detail, setDetail] = useState<Trail | null>(null);
-  const [showLabels, setShowLabels] = useState(true);
-  const [showRoads, setShowRoads] = useState(true);
+  const [showRefs, setShowRefs] = useState(false);
+  const [showSat, setShowSat] = useState(false);
+  const [showTopo, setShowTopo] = useState(false);
+  const [layersOpen, setLayersOpen] = useState(false);
   const [gallery, setGallery] = useState<{ items: GalleryItem[]; index: number } | null>(null);
   const [viewRect, setViewRect] = useState<ViewRect | null>(null);
 
@@ -97,24 +124,43 @@ export default function App() {
         lang={lang} total={allTrails.length} trails={allTrails} visible={visible}
         indexOf={(t) => indexBySlug.get(t.slug)!} activeSlug={activeSlug}
         search={search} sortMode={sortMode} themeFilter={themeFilter} catFilter={catFilter}
-        attrFilter={attrFilter} routeTypes={routeTypes}
+        attrFilter={attrFilter} routeTypes={routeTypes} detail={detail}
         onSearch={setSearch} onSort={setSortMode} onTheme={setThemeFilter} onCat={setCatFilter}
         onToggleAttr={toggleAttr} onLang={setLang}
         onResetView={() => map.current?.resetView()}
         onSelect={(t) => selectTrail(t, false)}
         onFly={(t) => selectTrail(t, true)}
+        onCloseDetail={() => setDetail(null)}
+        onNavigate={(t) => selectTrail(t, true)}
+        onOpenSegment={onOpenSegment}
+        onOpenGallery={(items, index) => setGallery({ items, index })}
       />
       <div id="cesiumWrap">
-        <MapView ref={map} trails={allTrails} showLabels={showLabels} showRoads={showRoads}
+        <MapView ref={map} trails={allTrails} showRefs={showRefs} showSat={showSat} showTopo={showTopo}
           onPick={(slug) => { const t = allTrails.find((x) => x.slug === slug); if (t) selectTrail(t, false); }}
           onActiveChange={setActiveSlug} onViewChange={setViewRect} />
-        <div id="layers">
-          <label><input type="checkbox" checked={showLabels} onChange={(e) => setShowLabels(e.target.checked)} /> {d.labels}</label>
-          <label><input type="checkbox" checked={showRoads} onChange={(e) => setShowRoads(e.target.checked)} /> {d.roads}</label>
+        <div id="layersCtl">
+          <button className={"layers-btn" + (layersOpen ? " on" : "")} title={d.layersTitle}
+            aria-label={d.layersTitle} aria-pressed={layersOpen} onClick={() => setLayersOpen((o) => !o)}>
+            <LayersIcon />
+          </button>
+          {layersOpen && (
+            <div id="layers">
+              <button className={"layers-btn" + (showSat ? " on" : "")} title={d.satellite}
+                aria-label={d.satellite} aria-pressed={showSat} onClick={() => setShowSat((s) => !s)}>
+                <SatIcon />
+              </button>
+              <button className={"layers-btn" + (showTopo ? " on" : "")} title={d.topo}
+                aria-label={d.topo} aria-pressed={showTopo} onClick={() => setShowTopo((s) => !s)}>
+                <TopoIcon />
+              </button>
+              <button className={"layers-btn" + (showRefs ? " on" : "")} title={d.labels}
+                aria-label={d.labels} aria-pressed={showRefs} onClick={() => setShowRefs((s) => !s)}>
+                <RefsIcon />
+              </button>
+            </div>
+          )}
         </div>
-        <DetailPanel trail={detail} lang={lang} onClose={() => setDetail(null)}
-          onOpenSegment={onOpenSegment}
-          onOpenGallery={(items, index) => setGallery({ items, index })} />
         {gallery && (
           <Gallery items={gallery.items} index={gallery.index}
             onIndex={(i) => setGallery((g) => (g ? { ...g, index: i } : g))}

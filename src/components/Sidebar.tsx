@@ -1,7 +1,10 @@
-import type { Lang, Trail } from "../data/types";
+import { useState } from "react";
+import type { Lang, Segment, Trail } from "../data/types";
 import { I18N } from "../data/i18n";
 import { catLabels, propLabels } from "../generated/trails";
 import { colorFor, fmtQty, nameOf, pick } from "../lib/lang";
+import DetailPanel from "./DetailPanel";
+import type { GalleryItem } from "./Gallery";
 
 export type SortMode = "name" | "dist" | "dur";
 
@@ -18,6 +21,7 @@ interface Props {
   catFilter: string;
   attrFilter: Set<string>;
   routeTypes: string[];
+  detail: Trail | null;
   onSearch: (v: string) => void;
   onSort: (v: SortMode) => void;
   onTheme: (v: string) => void;
@@ -27,49 +31,55 @@ interface Props {
   onResetView: () => void;
   onSelect: (t: Trail) => void;
   onFly: (t: Trail) => void;
+  onCloseDetail: () => void;
+  onNavigate: (t: Trail) => void;
+  onOpenSegment: (seg: Segment | null) => void;
+  onOpenGallery: (items: GalleryItem[], index: number) => void;
 }
 
+// Material Symbols "my_location" (filled) — Google Maps' show-on-map glyph
 const Reticle = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
-    <circle cx="12" cy="12" r="6" />
-    <line x1="12" y1="1" x2="12" y2="5" /><line x1="12" y1="19" x2="12" y2="23" />
-    <line x1="1" y1="12" x2="5" y2="12" /><line x1="19" y1="12" x2="23" y2="12" />
+  <svg viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" />
+  </svg>
+);
+
+const Funnel = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="3 4 21 4 14 12.5 14 20 10 22 10 12.5 3 4" />
+  </svg>
+);
+
+// ascending/descending bars — the sort affordance on the list header
+const SortIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <line x1="4" y1="6" x2="13" y2="6" /><line x1="4" y1="12" x2="11" y2="12" /><line x1="4" y1="18" x2="9" y2="18" />
+    <polyline points="17 7 17 18 20 15" /><line x1="17" y1="18" x2="14" y2="15" />
   </svg>
 );
 
 export default function Sidebar(p: Props) {
   const d = I18N[p.lang];
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const themeUris = Object.keys(catLabels).sort((a, b) =>
     pick(catLabels[a], p.lang).toLowerCase().localeCompare(pick(catLabels[b], p.lang).toLowerCase(), p.lang));
   const attrKeys = Object.keys(propLabels).sort((a, b) =>
     pick(propLabels[a], p.lang).toLowerCase().localeCompare(pick(propLabels[b], p.lang).toLowerCase(), p.lang));
 
-  return (
-    <div id="sidebar">
-      <header>
-        <div>
-          <h1>{d.title}</h1>
-          <p><span>{p.total}</span> {d.subtitle}</p>
-        </div>
-        <div id="langs">
-          {(["lt", "en", "ru"] as Lang[]).map((l) => (
-            <button key={l} className={l === p.lang ? "on" : ""} onClick={() => p.onLang(l)}>{l.toUpperCase()}</button>
-          ))}
-        </div>
-      </header>
+  const cls = [filtersOpen ? "filters-open" : "", p.detail ? "detail-open" : ""].filter(Boolean).join(" ");
 
+  return (
+    <div id="sidebar" className={cls}>
       <div id="controls">
         <input id="search" type="search" autoComplete="off" placeholder={d.search}
           value={p.search} onChange={(e) => p.onSearch(e.target.value)} />
+        <button className={"funnel" + (filtersOpen ? " on" : "")} aria-label={d.attrLbl}
+          aria-pressed={filtersOpen} title={d.attrLbl} onClick={() => setFiltersOpen((o) => !o)}>
+          <Funnel />
+          {p.attrFilter.size > 0 && <span className="fbadge">{p.attrFilter.size}</span>}
+        </button>
         <button className="act" onClick={p.onResetView}>{d.loadAll}</button>
         <div id="filters">
-          <label className="fld"><span>{d.sortLbl}</span>
-            <select value={p.sortMode} onChange={(e) => p.onSort(e.target.value as SortMode)}>
-              <option value="name">{d.sortName}</option>
-              <option value="dist">{d.sortDist}</option>
-              <option value="dur">{d.sortDur}</option>
-            </select>
-          </label>
           <label className="fld"><span>{d.catLbl}</span>
             <select value={p.themeFilter} onChange={(e) => p.onTheme(e.target.value)}>
               <option value="">{d.allCats}</option>
@@ -96,7 +106,17 @@ export default function Sidebar(p: Props) {
         </div>
       </div>
 
-      <div id="count">{p.visible.length} {d.shown}</div>
+      <div id="count">
+        <span className="cnum"><span>{p.visible.length}</span> / {p.total} {d.shown}</span>
+        <label className="sortctl" title={d.sortLbl}>
+          <SortIcon />
+          <select value={p.sortMode} onChange={(e) => p.onSort(e.target.value as SortMode)} aria-label={d.sortLbl}>
+            <option value="name">{d.sortName}</option>
+            <option value="dist">{d.sortDist}</option>
+            <option value="dur">{d.sortDur}</option>
+          </select>
+        </label>
+      </div>
 
       <div id="list">
         {p.visible.map((t) => {
@@ -113,6 +133,17 @@ export default function Sidebar(p: Props) {
             </div>
           );
         })}
+      </div>
+
+      {p.detail && (
+        <DetailPanel trail={p.detail} lang={p.lang} onClose={p.onCloseDetail}
+          onNavigate={p.onNavigate} onOpenSegment={p.onOpenSegment} onOpenGallery={p.onOpenGallery} />
+      )}
+
+      <div id="langs">
+        {(["lt", "en", "ru"] as Lang[]).map((l) => (
+          <button key={l} className={l === p.lang ? "on" : ""} onClick={() => p.onLang(l)}>{l.toUpperCase()}</button>
+        ))}
       </div>
     </div>
   );

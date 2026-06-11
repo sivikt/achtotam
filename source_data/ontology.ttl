@@ -22,7 +22,7 @@ ct:Trail a owl:Class ;
 ct:gpxFile a owl:DatatypeProperty ; rdfs:domain ct:Trail ; rdfs:range xsd:anyURI ;
     rdfs:label "GPX file"@en , "GPX failas"@lt , "GPX файл"@ru .
 ct:routeType a owl:DatatypeProperty ; rdfs:domain ct:Trail ; rdfs:range rdf:langString ;
-    rdfs:label "route type"@en , "maršruto tipas"@lt , "тип маршрута"@ru .
+    rdfs:label "geometry"@en , "geometrija"@lt , "геометрия"@ru .
 
 # --- measured quantities (value + unit) ---
 ct:Quantity a owl:Class ;
@@ -63,12 +63,12 @@ ct:hasSegment a owl:ObjectProperty ; rdfs:domain ct:Trail ; rdfs:range ct:TrailS
 ct:segmentNumber a owl:DatatypeProperty ; rdfs:domain ct:TrailSegment ; rdfs:range xsd:integer ;
     rdfs:label "segment order"@en , "atkarpos numeris"@lt , "номер участка"@ru .
 
-# --- themed categories (source taxonomy: scenic, barefoot, viewpoints, etc.) ---
+# --- subjective characteristics (source taxonomy: scenic, barefoot, viewpoints, etc.) ---
 ct:Category a owl:Class ;
-    rdfs:label "Trail category"@en , "Tako kategorija"@lt , "Категория тропы"@ru ;
-    rdfs:comment "A themed grouping a trail belongs to, from the source catalog."@en .
+    rdfs:label "Subjective characteristic"@en , "Subjektyvi savybė"@lt , "Субъективная характеристика"@ru ;
+    rdfs:comment "A subjective, themed grouping a trail belongs to, from the source catalog."@en .
 ct:category a owl:ObjectProperty ; rdfs:domain ct:Trail ; rdfs:range ct:Category ;
-    rdfs:label "category"@en , "kategorija"@lt , "категория"@ru .
+    rdfs:label "subjective characteristic"@en , "subjektyvi savybė"@lt , "субъективная характеристика"@ru .
 
 ct:asphaltAccess a owl:DatatypeProperty , ct:TrailProperty ;
     rdfs:domain ct:Trail ; rdfs:range xsd:boolean ;
@@ -140,7 +140,6 @@ ct:audioInfo a owl:DatatypeProperty , ct:TrailProperty ;
 
 ct:suitableForCycling a owl:DatatypeProperty , ct:TrailProperty ;
     rdfs:domain ct:Trail ; rdfs:range xsd:boolean ;
-    rdfs:comment "Inferred from the trail's free-text description."@en ;
     rdfs:label "Tinka dviratininkams"@lt , "Suitable for cyclists"@en , "Подходит для велосипедистов"@ru .
 
 ct:cat-942 a ct:Category ;

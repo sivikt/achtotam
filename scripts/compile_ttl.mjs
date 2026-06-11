@@ -36,6 +36,20 @@ function byLang(s, p) {
   for (const t of objs(s, p)) if (t.termType === "Literal") m[t.language || "lt"] = t.value;
   return m;
 }
+// first and last vertex of a WKT geometry (vertices are listed in path order in
+// both LINESTRING and MULTILINESTRING), as [lng,lat]
+function endpointsFromWKT(wkt) {
+  const re = /(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/g;
+  let m, first = null, last = null;
+  while ((m = re.exec(wkt))) {
+    const lng = parseFloat(m[1]), lat = parseFloat(m[2]);
+    if (!isFinite(lng) || !isFinite(lat)) continue;
+    if (!first) first = [lng, lat];
+    last = [lng, lat];
+  }
+  return first ? { start: first, finish: last } : null;
+}
+
 function quantity(node) {
   if (!node) return null;
   const v = one(node.value, NS.ct + "value");
@@ -83,6 +97,18 @@ for (const q of store.getQuads(null, NS.rdf + "type", DataFactory.namedNode(NS.c
   }
   const g = one(s, NS.geosparql + "hasGeometry");
   if (g) { const wkt = one(g.value, NS.geosparql + "asWKT"); if (wkt) t.wkt = wkt.value; }
+
+  // start / finish markers: from the geometry endpoints, else the single point.
+  // address (which describes where the route begins) is attached to the start;
+  // a circular route (start ≈ finish, ~30 m) collapses to a single start marker.
+  let ends = t.wkt ? endpointsFromWKT(t.wkt) : null;
+  if (!ends && isFinite(t.lat) && isFinite(t.lng)) ends = { start: [t.lng, t.lat], finish: [t.lng, t.lat] };
+  if (ends) {
+    const [a, b] = [ends.start, ends.finish];
+    const circular = Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.0003;
+    t.start = { lng: a[0], lat: a[1], address: t.address || undefined };
+    if (!circular) t.finish = { lng: b[0], lat: b[1] };
+  }
   for (const so of objs(s, NS.ct + "hasSegment")) {
     const su = so.value;
     const seg = {

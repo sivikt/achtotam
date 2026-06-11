@@ -238,6 +238,101 @@ def wkt_from_gpx(path):
     return "MULTILINESTRING(" + ", ".join(f"({line(p)})" for p in segs) + ")"
 
 
+# one LINESTRING (with start vertex and centroid) per <trk> in a bundled GPX —
+# used to split a multi-track "all trails" file back into its individual routes.
+def wkt_per_trk(path):
+    if not os.path.exists(path):
+        return []
+    h = open(path, encoding="utf-8", errors="ignore").read()
+    out = []
+    for trk in re.findall(r"<trk>(.*?)</trk>", h, re.S):
+        pts = [(float(a), float(b)) for a, b in
+               re.findall(r'lat="([-\d.]+)"[^>]*lon="([-\d.]+)"', trk)]
+        if len(pts) < 2:
+            continue
+        lats = [a for a, _ in pts]
+        lons = [b for _, b in pts]
+        out.append({
+            "wkt": "LINESTRING(" + ", ".join(f"{b} {a}" for a, b in pts) + ")",
+            "start": (lons[0], lats[0]),                        # (lng, lat)
+            "centroid": (sum(lons) / len(lons), sum(lats) / len(lats)),
+        })
+    return out
+
+
+# coordinate pair as it appears inline in the Lithuanian prose ("lat, lng")
+COORD_RE = re.compile(r"(\d{2}\.\d{3,})\s*,?\s*(\d{2}\.\d{3,})")
+
+
+def _dist(a, b):
+    return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
+
+
+def synthesize_parts(r):
+    """Some pages bundle several *named* sub-trails — each introduced by its own
+    heading and an inline coordinate — into a single GPX of multiple <trk>s, with
+    no structured parts. Detect that shape (>=2 inline coordinates) and split it:
+    keep the intro as the trail's own description and pair every sub-trail section
+    to its <trk> by coordinate proximity (coordinate-less sections take leftover
+    tracks in document order). Returns (main_description_lt, parts) or None.
+
+    Article-style pages whose headings are sections ("Route and surface", "Where
+    is it?") carry no inline coordinates, so they never trigger this."""
+    desc = r.get("description_lt", "")
+    if len(COORD_RE.findall(desc)) < 2:
+        return None
+    trks = wkt_per_trk(os.path.join(ROOT, r.get("gpx_file") or ""))
+    if len(trks) < 2:
+        return None
+    paras = [p.strip() for p in desc.split("\n\n") if p.strip()]
+    heads = [i for i, p in enumerate(paras) if len(p) < 60]
+    if len(heads) < 3:                                  # title + >=2 sub-trails
+        return None
+
+    first = heads[1]                                    # first sub-trail heading
+    main_desc = "\n\n".join(paras[:first])
+    sections = []
+    for hi, h in enumerate(heads[1:]):
+        nxt = heads[2 + hi] if 2 + hi < len(heads) else len(paras)
+        body = "\n\n".join(paras[h + 1:nxt])
+        m = COORD_RE.search(body)
+        sections.append({
+            "name": paras[h], "body": body,
+            "coord": (float(m.group(2)), float(m.group(1))) if m else None,  # lng,lat
+        })
+
+    used = [False] * len(trks)
+
+    def claim_nearest(coord):
+        best, bi = 1e9, -1
+        for i, tk in enumerate(trks):
+            if used[i]:
+                continue
+            d = min(_dist(coord, tk["start"]), _dist(coord, tk["centroid"]))
+            if d < best:
+                best, bi = d, i
+        if bi >= 0:
+            used[bi] = True
+        return bi
+
+    for sec in sections:                                # coordinate sections first
+        sec["trk"] = trks[claim_nearest(sec["coord"])]["wkt"] if sec["coord"] else None
+    free = [i for i, u in enumerate(used) if not u]
+    for sec in sections:                                # then coordinate-less ones
+        if not sec["trk"] and free:
+            sec["trk"] = trks[free.pop(0)]["wkt"]
+
+    parts, n = [], 0
+    for sec in sections:
+        if not sec["trk"]:
+            continue
+        n += 1
+        parts.append({"slug": f"{r['slug']}-p{n:02d}", "num": n,
+                      "name_lt": sec["name"], "description_lt": sec["body"],
+                      "wkt": sec["trk"]})
+    return (main_desc, parts) if len(parts) >= 2 else None
+
+
 # ---------------------------------------------------------------- output helpers
 def write_ttl(name, text):
     """Write the generated Turtle file into source_data/. The Turtle is itself a
@@ -291,7 +386,7 @@ ct:Trail a owl:Class ;
 ct:gpxFile a owl:DatatypeProperty ; rdfs:domain ct:Trail ; rdfs:range xsd:anyURI ;
     rdfs:label "GPX file"@en , "GPX failas"@lt , "GPX файл"@ru .
 ct:routeType a owl:DatatypeProperty ; rdfs:domain ct:Trail ; rdfs:range rdf:langString ;
-    rdfs:label "route type"@en , "maršruto tipas"@lt , "тип маршрута"@ru .
+    rdfs:label "geometry"@en , "geometrija"@lt , "геометрия"@ru .
 
 # --- measured quantities (value + unit) ---
 ct:Quantity a owl:Class ;
@@ -332,23 +427,19 @@ ct:hasSegment a owl:ObjectProperty ; rdfs:domain ct:Trail ; rdfs:range ct:TrailS
 ct:segmentNumber a owl:DatatypeProperty ; rdfs:domain ct:TrailSegment ; rdfs:range xsd:integer ;
     rdfs:label "segment order"@en , "atkarpos numeris"@lt , "номер участка"@ru .
 
-# --- themed categories (source taxonomy: scenic, barefoot, viewpoints, etc.) ---
+# --- subjective characteristics (source taxonomy: scenic, barefoot, viewpoints, etc.) ---
 ct:Category a owl:Class ;
-    rdfs:label "Trail category"@en , "Tako kategorija"@lt , "Категория тропы"@ru ;
-    rdfs:comment "A themed grouping a trail belongs to, from the source catalog."@en .
+    rdfs:label "Subjective characteristic"@en , "Subjektyvi savybė"@lt , "Субъективная характеристика"@ru ;
+    rdfs:comment "A subjective, themed grouping a trail belongs to, from the source catalog."@en .
 ct:category a owl:ObjectProperty ; rdfs:domain ct:Trail ; rdfs:range ct:Category ;
-    rdfs:label "category"@en , "kategorija"@lt , "категория"@ru .
+    rdfs:label "subjective characteristic"@en , "subjektyvi savybė"@lt , "субъективная характеристика"@ru .
 """
     blocks = [P]
     for prop in PROP_ORDER:
         labels = prop_labels[prop]   # {lt,en,ru}
-        comment = ""
-        if prop == "suitableForCycling":
-            comment = '    rdfs:comment "Inferred from the trail\'s free-text description."@en ;\n'
         blocks.append(
             f"ct:{prop} a owl:DatatypeProperty , ct:TrailProperty ;\n"
             f"    rdfs:domain ct:Trail ; rdfs:range xsd:boolean ;\n"
-            f"{comment}"
             f"    rdfs:label {lit_langs(labels)} .\n")
     # category individuals (controlled vocabulary, multilingual labels)
     for c in categories:
@@ -433,13 +524,17 @@ def build_data(trails, prop_labels):
             S = [f"\nct:seg-{ps} a ct:TrailSegment ;",
                  f"    ct:segmentNumber {p['num']} ;",
                  f"    rdfs:label {lit_langs(p['name'])} ;",
-                 f"    schema:name {lit_langs(p['name'])} ;",
-                 f'    ct:gpxFile "{p["gpx_source"]}"^^xsd:anyURI ;']
+                 f"    schema:name {lit_langs(p['name'])} ;"]
+            if p.get("gpx_source"):
+                S.append(f'    ct:gpxFile "{p["gpx_source"]}"^^xsd:anyURI ;')
             for url in p.get("images", []):
                 S.append(f"    foaf:depiction <{url}> ;")
             for rel in p.get("local_images", []):
                 S.append(f"    schema:image <{rel}> ;")
-            pwkt = wkt_from_gpx(os.path.join(ROOT, p["gpx_file"])) if p.get("gpx_file") else None
+            # geometry: a precomputed WKT (split from a bundled GPX) wins, else the
+            # part's own GPX file.
+            pwkt = p.get("wkt") or (
+                wkt_from_gpx(os.path.join(ROOT, p["gpx_file"])) if p.get("gpx_file") else None)
             if pwkt:
                 S.append(f"    geosparql:hasGeometry ct:geom-seg-{ps} ;")
             if any(p["description"].values()):
@@ -485,6 +580,13 @@ def main():
 
     trails = []
     for i, r in enumerate(raw, 1):
+        # pages that bundle several named sub-trails into one multi-track GPX have
+        # no structured parts; reconstruct them and trim the trail description to
+        # its intro so the sub-trail prose lives on the segments instead.
+        if not r.get("parts"):
+            syn = synthesize_parts(r)
+            if syn:
+                r["description_lt"], r["parts"] = syn
         name = {"lt": r["name_lt"], "en": translate(r["name_lt"], "en"), "ru": translate(r["name_lt"], "ru")}
         desc = {"lt": r["description_lt"]}
         for l in LANGS:
@@ -493,7 +595,10 @@ def main():
         for l in LANGS:
             rtype[l] = translate(r["type_lt"], l)
         props = {f["prop"]: True for f in r["features"]}
-        props["suitableForCycling"] = bool(re.search(r"dvira[čc]i", r["description_lt"].lower()))
+        # cycling suitability is a stored fact, decided once here from the English
+        # description text; the client never infers it.
+        en_text = desc["en"].lower()
+        props["suitableForCycling"] = any(k in en_text for k in ("cycl", "bike"))
         parts = []
         for p in r.get("parts", []):
             pname = {"lt": p["name_lt"], "en": translate(p["name_lt"], "en"), "ru": translate(p["name_lt"], "ru")}

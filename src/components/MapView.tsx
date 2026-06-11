@@ -13,8 +13,9 @@ export interface MapHandle {
 
 interface Props {
   trails: Trail[];
-  showLabels: boolean;
-  showRoads: boolean;
+  showRefs: boolean;
+  showSat: boolean;
+  showTopo: boolean;
   onPick: (slug: string) => void;
   onActiveChange: (slug: string | null) => void;
   onViewChange: (rect: { w: number; s: number; e: number; n: number } | null) => void;
@@ -33,13 +34,16 @@ function boundsOfLines(lines: number[][]) {
 }
 
 const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
-  const { trails, showLabels, showRoads, onPick, onActiveChange, onViewChange } = props;
+  const { trails, showRefs, showSat, showTopo, onPick, onActiveChange, onViewChange } = props;
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
   const labelsRef = useRef<Cesium.ImageryLayer | null>(null);
   const roadsRef = useRef<Cesium.ImageryLayer | null>(null);
+  const satRef = useRef<Cesium.ImageryLayer | null>(null);
+  const topoRef = useRef<Cesium.ImageryLayer | null>(null);
   const entities = useRef<Record<string, Ent | Ent[]>>({});
   const segEntities = useRef<Ent[]>([]);
+  const endpointEntities = useRef<Ent[]>([]);
   const activeSlug = useRef<string | null>(null);
 
   // keep callbacks fresh for the picker/camera closures
@@ -51,35 +55,76 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
   useEffect(() => {
     Cesium.Ion.defaultAccessToken = undefined as unknown as string;
     const viewer = new Cesium.Viewer(containerRef.current!, {
-      baseLayer: Cesium.ImageryLayer.fromProviderAsync(
-        Cesium.ArcGisMapServerImageryProvider.fromUrl(ESRI + "World_Imagery/MapServer"), {}),
-      baseLayerPicker: false, geocoder: false, homeButton: true, sceneModePicker: true,
+      // OpenStreetMap (same tiles as openstreetmap.org) is the default base map
+      baseLayer: new Cesium.ImageryLayer(new Cesium.UrlTemplateImageryProvider({
+        url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        credit: "© OpenStreetMap contributors", maximumLevel: 19,
+      })),
+      sceneMode: Cesium.SceneMode.SCENE3D,
+      baseLayerPicker: false, geocoder: false, homeButton: false, sceneModePicker: false,
       navigationHelpButton: false, animation: false, timeline: false, fullscreenButton: true,
       selectionIndicator: false, infoBox: false,
     });
     viewer.scene.globe.enableLighting = false;
     viewerRef.current = viewer;
 
+    // satellite imagery sits above the OSM base and is toggled on demand
+    const sat = Cesium.ImageryLayer.fromProviderAsync(
+      Cesium.ArcGisMapServerImageryProvider.fromUrl(ESRI + "World_Imagery/MapServer"), {});
+    // OpenTopoMap: topographic basemap with contour lines + elevation labels
+    const topo = new Cesium.ImageryLayer(new Cesium.UrlTemplateImageryProvider({
+      url: "https://tile.opentopomap.org/{z}/{x}/{y}.png",
+      credit: "© OpenTopoMap (CC-BY-SA)", maximumLevel: 17,
+    }));
+    // transparent reference overlay: roads/transport (streets) + country/place labels,
+    // drawn on top so it reads over satellite (the OSM base already carries these itself)
     const roads = Cesium.ImageryLayer.fromProviderAsync(
       Cesium.ArcGisMapServerImageryProvider.fromUrl(ESRI + "Reference/World_Transportation/MapServer"), {});
     const labels = Cesium.ImageryLayer.fromProviderAsync(
       Cesium.ArcGisMapServerImageryProvider.fromUrl(ESRI + "Reference/World_Boundaries_and_Places/MapServer"), {});
+    viewer.imageryLayers.add(sat);
+    viewer.imageryLayers.add(topo);
     viewer.imageryLayers.add(roads);
     viewer.imageryLayers.add(labels);
+    sat.show = showSat;
+    topo.show = showTopo;
+    roads.show = showRefs;
+    labels.show = showRefs;
+    satRef.current = sat;
+    topoRef.current = topo;
     roadsRef.current = roads;
     labelsRef.current = labels;
 
     const picker = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-    const slugFromPick = (pos: Cesium.Cartesian2) => {
+    const slugAt = (pos: Cesium.Cartesian2) => {
       const picked = viewer.scene.pick(pos);
       return Cesium.defined(picked) && picked.id ? (picked.id as Ent).trailSlug ?? null : null;
     };
+    // Thin (2px) polylines are nearly impossible to hit with a fingertip, so an
+    // exact pick at the tap point usually misses on touch. Sample a few rings of
+    // points around the tap and take the first trail we land on. radius scales
+    // up for coarse (touch) input.
+    const slugNear = (pos: Cesium.Cartesian2, radius: number) => {
+      const exact = slugAt(pos);
+      if (exact) return exact;
+      const scratch = new Cesium.Cartesian2();
+      for (let r = 6; r <= radius; r += 6) {
+        for (let a = 0; a < 360; a += 30) {
+          const rad = (a * Math.PI) / 180;
+          scratch.x = pos.x + Math.cos(rad) * r;
+          scratch.y = pos.y + Math.sin(rad) * r;
+          const slug = slugAt(scratch);
+          if (slug) return slug;
+        }
+      }
+      return null;
+    };
     picker.setInputAction((e: { position: Cesium.Cartesian2 }) => {
-      const slug = slugFromPick(e.position);
+      const slug = slugNear(e.position, 28);
       if (slug) onPickRef.current(slug);
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
     picker.setInputAction((e: { endPosition: Cesium.Cartesian2 }) => {
-      viewer.scene.canvas.style.cursor = slugFromPick(e.endPosition) ? "pointer" : "";
+      viewer.scene.canvas.style.cursor = slugNear(e.endPosition, 12) ? "pointer" : "";
     }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
 
     // report the visible globe rectangle so the list can show only in-view trails.
@@ -105,8 +150,12 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
     return () => { viewer.camera.moveEnd.removeEventListener(emitView); picker.destroy(); viewer.destroy(); };
   }, []);
 
-  useEffect(() => { if (labelsRef.current) labelsRef.current.show = showLabels; }, [showLabels]);
-  useEffect(() => { if (roadsRef.current) roadsRef.current.show = showRoads; }, [showRoads]);
+  useEffect(() => {
+    if (labelsRef.current) labelsRef.current.show = showRefs;
+    if (roadsRef.current) roadsRef.current.show = showRefs;
+  }, [showRefs]);
+  useEffect(() => { if (satRef.current) satRef.current.show = showSat; }, [showSat]);
+  useEffect(() => { if (topoRef.current) topoRef.current.show = showTopo; }, [showTopo]);
 
   function applyHighlight() {
     for (const slug in entities.current) {
@@ -154,6 +203,34 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
     segEntities.current = [];
   }
 
+  function clearEndpoints() {
+    const viewer = viewerRef.current;
+    if (viewer) endpointEntities.current.forEach((e) => viewer.entities.remove(e));
+    endpointEntities.current = [];
+  }
+
+  // green = start, red = finish; shown only for the active trail. clicking a
+  // marker re-selects the trail, matching the polyline pick behaviour.
+  function showEndpoints(t: Trail) {
+    clearEndpoints();
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    const add = (p: { lng: number; lat: number }, css: string) => {
+      const e = viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(p.lng, p.lat),
+        point: {
+          pixelSize: 13, color: Cesium.Color.fromCssColorString(css),
+          outlineColor: Cesium.Color.WHITE, outlineWidth: 2,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+      }) as Ent;
+      e.trailSlug = t.slug;
+      endpointEntities.current.push(e);
+    };
+    if (t.start) add(t.start, "#2ecc71");
+    if (t.finish) add(t.finish, "#e74c3c");
+  }
+
   useImperativeHandle(ref, (): MapHandle => ({
     showTrack(i, fly) {
       const viewer = viewerRef.current!;
@@ -162,12 +239,20 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
       activeSlug.current = t.slug;
       onActiveChange(t.slug);
       applyHighlight();
+      showEndpoints(t);
       const e = entities.current[t.slug];
-      if (fly && e) viewer.flyTo(e as Ent | Ent[], { duration: 1.2 });
+      if (fly && e) {
+        // preserve the current orientation: only pan/zoom to the trail, keeping
+        // the user's heading & pitch instead of tilting to a default 3D view.
+        // range 0 lets Cesium compute a fit distance for the trail's extent.
+        const offset = new Cesium.HeadingPitchRange(viewer.camera.heading, viewer.camera.pitch, 0);
+        viewer.flyTo(e as Ent | Ent[], { duration: 1.2, offset });
+      }
     },
     resetView() {
       trails.forEach((_, i) => ensureEntity(i));
       applyHighlight();
+      clearEndpoints();
       viewerRef.current!.camera.flyTo({ destination: LITHUANIA() });
     },
     highlightSegment(seg) {

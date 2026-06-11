@@ -15,6 +15,13 @@ export interface Segment {
   wkt?: string;
 }
 
+// a route's start / finish marker: coordinates plus an optional address
+export interface RoutePoint {
+  lng: number;
+  lat: number;
+  address?: string;
+}
+
 export interface Trail {
   uri: string;
   slug: string;
@@ -33,5 +40,7 @@ export interface Trail {
   props: string[];
   categories: string[];
   segments: Segment[];
+  start?: RoutePoint;
+  finish?: RoutePoint;
   wkt?: string;
 }
