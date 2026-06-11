@@ -12,11 +12,12 @@ build/translations_cache.json), then writes two Turtle files:
 Translation uses the free Google endpoint (no API key). Swap `translate()`
 for a paid engine if you need higher quality.
 """
-import os, re, json, time, html, urllib.request, urllib.parse
+import os, re, json, time, html, zipfile, unicodedata, urllib.request, urllib.parse
 
 ROOT  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC   = os.path.join(ROOT, "source_data")
 RAW   = os.path.join(SRC, "tracks_raw.json")
+TRACKS_DIR = os.path.join(SRC, "yurii_hiking_tracks")   # loose KML/KMZ track files
 CACHE = os.path.join(SRC, "translations_cache.json")
 UA    = {"User-Agent": "Mozilla/5.0"}
 LANGS = ["en", "ru"]
@@ -260,6 +261,98 @@ def wkt_per_trk(path):
     return out
 
 
+# ---------------------------------------------------------------- KML / KMZ tracks
+def _kml_text(path):
+    """Raw KML markup, transparently unzipping a .kmz (the geometry lives in the
+    single .kml entry, usually doc.kml)."""
+    if path.lower().endswith(".kmz"):
+        with zipfile.ZipFile(path) as z:
+            name = next((n for n in z.namelist() if n.lower().endswith(".kml")), None)
+            return z.read(name).decode("utf-8", "ignore") if name else ""
+    return open(path, encoding="utf-8", errors="ignore").read()
+
+
+def wkt_from_kml(path):
+    """Track geometry from a Google-Earth KML/KMZ. Each <LineString> or
+    <LinearRing> (loop routes are exported as rings) coordinate list becomes one
+    line; <Point> placemarks (start pins, POIs) are ignored. KML coordinates are
+    "lng,lat[,alt]" triples separated by whitespace."""
+    h = _kml_text(path)
+    lines = []
+    for tag in ("LineString", "LinearRing"):
+        for block in re.findall(rf"<{tag}\b.*?>(.*?)</{tag}>", h, re.S):
+            m = re.search(r"<coordinates>(.*?)</coordinates>", block, re.S)
+            if not m:
+                continue
+            pts = []
+            for tok in m.group(1).split():
+                c = tok.split(",")
+                if len(c) >= 2:
+                    pts.append((c[0], c[1]))            # (lng, lat)
+            if len(pts) >= 2:
+                lines.append(pts)
+    if not lines:
+        return None
+
+    def seg(p):
+        return ", ".join(f"{lng} {lat}" for lng, lat in p)
+
+    if len(lines) == 1:
+        return f"LINESTRING({seg(lines[0])})"
+    return "MULTILINESTRING(" + ", ".join(f"({seg(p)})" for p in lines) + ")"
+
+
+def _wkt_centroid(wkt):
+    """(lat, lng) average of every vertex in a WKT geometry."""
+    pts = re.findall(r"(-?\d+\.\d+)\s+(-?\d+\.\d+)", wkt)
+    if not pts:
+        return None
+    xs = [float(a) for a, _ in pts]
+    ys = [float(b) for _, b in pts]
+    return sum(ys) / len(ys), sum(xs) / len(xs)
+
+
+def slugify(s):
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-") or "track"
+
+
+# subjective category tagged on every loose club track (a proper noun, so its
+# label is fixed across languages rather than machine-translated)
+EPAM_CATEGORY = {"id": "epam-hiking-club", "name_lt": "EPAM Hiking club",
+                 "label": {"lt": "EPAM Hiking club", "en": "EPAM Hiking club",
+                           "ru": "EPAM Hiking club"}}
+# this file is not an EPAM club route, so it is not tagged with the category
+NON_EPAM_FILES = {"25 km Toyota Ėjimas Vilniuje 2026 Pavasaris F.kmz"}
+
+
+def load_track_files():
+    """Ingest the loose KML/KMZ files in source_data/yurii_hiking_tracks/ as
+    minimal trail entries — these are just tracks: a name (the file name) and a
+    geometry, no description / amenities. All but the listed non-club files are
+    tagged with the EPAM Hiking club subjective category."""
+    out, seen = [], set()
+    if not os.path.isdir(TRACKS_DIR):
+        return out
+    for fn in sorted(os.listdir(TRACKS_DIR)):
+        if not fn.lower().endswith((".kml", ".kmz")):
+            continue
+        wkt = wkt_from_kml(os.path.join(TRACKS_DIR, fn))
+        if not wkt:
+            continue
+        name = os.path.splitext(fn)[0]
+        slug, base, n = "track-" + slugify(name), "track-" + slugify(name), 2
+        while slug in seen:
+            slug = f"{base}-{n}"; n += 1
+        seen.add(slug)
+        c = _wkt_centroid(wkt) or (0.0, 0.0)
+        cats = [] if fn in NON_EPAM_FILES else [EPAM_CATEGORY]
+        out.append({"slug": slug, "name_lt": name, "lat": c[0], "lng": c[1],
+                    "description_lt": "", "type_lt": "", "features": [],
+                    "categories": cats, "wkt": wkt})
+    return out
+
+
 # coordinate pair as it appears inline in the Lithuanian prose ("lat, lng")
 COORD_RE = re.compile(r"(\d{2}\.\d{3,})\s*,?\s*(\d{2}\.\d{3,})")
 
@@ -469,7 +562,8 @@ def build_data(trails, prop_labels):
         L = [f"{uri} a ct:Trail ;"]
         L.append(f"    rdfs:label {lit_langs(t['name'])} ;")
         L.append(f"    schema:name {lit_langs(t['name'])} ;")
-        L.append(f'    schema:url <{t["link"]}> ;')
+        if t.get("link"):
+            L.append(f'    schema:url <{t["link"]}> ;')
         if t.get("address_lt"):
             L.append(f'    schema:address "{esc1(t["address_lt"])}"@lt ;')
         if any(t["type"].values()):
@@ -494,7 +588,8 @@ def build_data(trails, prop_labels):
             L.append(f"    foaf:depiction <{url}> ;")
         for rel in t.get("local_images", []):
             L.append(f"    schema:image <{rel}> ;")
-        wkt = wkt_from_gpx(os.path.join(ROOT, t["gpx_file"])) if t.get("gpx_file") else None
+        wkt = t.get("wkt") or (
+            wkt_from_gpx(os.path.join(ROOT, t["gpx_file"])) if t.get("gpx_file") else None)
         if wkt:
             L.append(f"    geosparql:hasGeometry ct:geom-{s} ;")
         for p in t.get("parts", []):
@@ -554,6 +649,9 @@ def build_data(trails, prop_labels):
 
 def main():
     raw = json.load(open(RAW, encoding="utf-8"))
+    tracks = load_track_files()
+    raw += tracks
+    print(f"loaded {len(tracks)} loose KML/KMZ tracks")
 
     # property labels (lt + translated en/ru), translated once
     prop_labels = {}
@@ -571,10 +669,12 @@ def main():
             if c["id"] in seen:
                 continue
             seen.add(c["id"])
-            categories.append({"id": c["id"], "name_lt": c["name_lt"],
-                               "label": {"lt": c["name_lt"],
-                                         "en": translate(c["name_lt"], "en"),
-                                         "ru": translate(c["name_lt"], "ru")}})
+            # a category may carry its own fixed multilingual label (proper nouns
+            # like a club name); otherwise translate the LT name like everything else
+            label = c.get("label") or {"lt": c["name_lt"],
+                                        "en": translate(c["name_lt"], "en"),
+                                        "ru": translate(c["name_lt"], "ru")}
+            categories.append({"id": c["id"], "name_lt": c["name_lt"], "label": label})
     _save_cache()
     print(f"category labels translated ({len(categories)})")
 

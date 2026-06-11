@@ -159,3 +159,6 @@ ct:cat-989 a ct:Category ;
 
 ct:cat-944 a ct:Category ;
     rdfs:label "Po laukinę gamtą"@lt , "After the wild nature"@en , "После дикой природы"@ru .
+
+ct:cat-epam-hiking-club a ct:Category ;
+    rdfs:label "EPAM Hiking club"@lt , "EPAM Hiking club"@en , "EPAM Hiking club"@ru .
