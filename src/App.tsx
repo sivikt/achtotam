@@ -1,8 +1,8 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Lang, Segment, Trail } from "./data/types";
 import { trails as allTrails } from "./generated/trails";
 import { I18N } from "./data/i18n";
-import MapView, { type MapHandle } from "./components/MapView";
+import MapView, { type CameraState, type MapHandle } from "./components/MapView";
 import Sidebar, { type SortMode } from "./components/Sidebar";
 import Gallery, { type GalleryItem } from "./components/Gallery";
 import { nameOf, pick, qtyNum } from "./lib/lang";
@@ -52,23 +52,51 @@ const TopoIcon = () => (
   </svg>
 );
 
+// ontology namespace — themeFilter holds a full category URI; we store only the
+// short suffix in the URL (e.g. "cat-epam-hiking-club") and re-expand on read.
+const NS = "https://nesedeknamuose.lt/ontology/cognitive-trails#";
+const PARAMS = new URLSearchParams(window.location.search);
+
+const initialCam: CameraState | null = (() => {
+  const c = PARAMS.get("cam");
+  if (!c) return null;
+  const [lng, lat, height, heading, pitch] = c.split(",").map(Number);
+  if (![lng, lat, height].every(Number.isFinite)) return null;
+  return { lng, lat, height, heading: heading || 0, pitch: pitch || 0 };
+})();
+
+// write a fresh query string without reloading; drop the "?" when empty
+function pushUrl(p: URLSearchParams) {
+  const qs = p.toString();
+  window.history.replaceState(null, "", window.location.pathname + (qs ? `?${qs}` : "") + window.location.hash);
+}
+
 export default function App() {
-  const [lang, setLang] = useState<Lang>("en");
-  const [search, setSearch] = useState("");
-  const [sortMode, setSortMode] = useState<SortMode>("name");
-  const [themeFilter, setThemeFilter] = useState("");
-  const [catFilter, setCatFilter] = useState("");
-  const [attrFilter, setAttrFilter] = useState<Set<string>>(new Set());
-  const [activeSlug, setActiveSlug] = useState<string | null>(null);
-  const [detail, setDetail] = useState<Trail | null>(null);
-  const [showRefs, setShowRefs] = useState(false);
-  const [showSat, setShowSat] = useState(false);
-  const [showTopo, setShowTopo] = useState(false);
+  const langParam = PARAMS.get("lang");
+  const sortParam = PARAMS.get("sort");
+  const routeParam = PARAMS.get("route");
+  const [lang, setLang] = useState<Lang>(langParam === "lt" || langParam === "ru" ? langParam : "en");
+  const [search, setSearch] = useState(PARAMS.get("q") || "");
+  const [sortMode, setSortMode] = useState<SortMode>(
+    sortParam === "dist" || sortParam === "dur" ? sortParam : "name");
+  const [themeFilter, setThemeFilter] = useState(PARAMS.get("theme") ? NS + PARAMS.get("theme") : "");
+  const [catFilter, setCatFilter] = useState(PARAMS.get("type") || "");
+  const [attrFilter, setAttrFilter] = useState<Set<string>>(
+    new Set((PARAMS.get("attrs") || "").split(",").filter(Boolean)));
+  const [activeSlug, setActiveSlug] = useState<string | null>(routeParam || null);
+  const [detail, setDetail] = useState<Trail | null>(
+    () => (routeParam ? allTrails.find((t) => t.slug === routeParam) || null : null));
+  const [showRefs, setShowRefs] = useState(PARAMS.get("refs") === "1");
+  const [showSat, setShowSat] = useState(PARAMS.get("sat") === "1");
+  const [showTopo, setShowTopo] = useState(PARAMS.get("topo") === "1");
   const [layersOpen, setLayersOpen] = useState(false);
   const [gallery, setGallery] = useState<{ items: GalleryItem[]; index: number } | null>(null);
   const [viewRect, setViewRect] = useState<ViewRect | null>(null);
 
   const map = useRef<MapHandle>(null);
+  // latest camera pose as a "cam" query value, kept out of React state so panning
+  // the map doesn't re-render the whole app
+  const camRef = useRef<string | null>(PARAMS.get("cam"));
 
   const routeTypes = useMemo(() =>
     [...new Set(allTrails.map((t) => pick(t.routeType, lang)).filter(Boolean))]
@@ -116,6 +144,41 @@ export default function App() {
     else map.current?.clearSegHighlight();
   };
 
+  // mirror UI state into the query string (defaults are omitted to keep it short);
+  // the cam param is owned by onCameraChange and carried over from camRef here.
+  useEffect(() => {
+    const p = new URLSearchParams();
+    if (lang !== "en") p.set("lang", lang);
+    if (search) p.set("q", search);
+    if (sortMode !== "name") p.set("sort", sortMode);
+    if (themeFilter) p.set("theme", themeFilter.startsWith(NS) ? themeFilter.slice(NS.length) : themeFilter);
+    if (catFilter) p.set("type", catFilter);
+    if (attrFilter.size) p.set("attrs", [...attrFilter].join(","));
+    if (activeSlug) p.set("route", activeSlug);
+    if (showSat) p.set("sat", "1");
+    if (showTopo) p.set("topo", "1");
+    if (showRefs) p.set("refs", "1");
+    if (camRef.current) p.set("cam", camRef.current);
+    pushUrl(p);
+  }, [lang, search, sortMode, themeFilter, catFilter, attrFilter, activeSlug, showSat, showTopo, showRefs]);
+
+  const onCameraChange = (cam: CameraState) => {
+    camRef.current = `${cam.lng.toFixed(5)},${cam.lat.toFixed(5)},${Math.round(cam.height)},`
+      + `${cam.heading.toFixed(1)},${cam.pitch.toFixed(1)}`;
+    const p = new URLSearchParams(window.location.search);
+    p.set("cam", camRef.current);
+    pushUrl(p);
+  };
+
+  // a route from the URL: open its detail + highlight on the map. If the URL also
+  // carried a camera pose, don't fly (the saved view wins); otherwise frame it.
+  useEffect(() => {
+    if (!detail) return;
+    const i = indexBySlug.get(detail.slug);
+    if (i != null) map.current?.showTrack(i, !initialCam);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const d = I18N[lang];
 
   return (
@@ -137,6 +200,7 @@ export default function App() {
       />
       <div id="cesiumWrap">
         <MapView ref={map} trails={allTrails} showRefs={showRefs} showSat={showSat} showTopo={showTopo}
+          initialCam={initialCam} onCameraChange={onCameraChange}
           onPick={(slug) => { const t = allTrails.find((x) => x.slug === slug); if (t) selectTrail(t, false); }}
           onActiveChange={setActiveSlug} onViewChange={setViewRect} />
         <div id="layersCtl">

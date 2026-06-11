@@ -11,14 +11,18 @@ export interface MapHandle {
   clearSegHighlight: () => void;
 }
 
+export interface CameraState { lng: number; lat: number; height: number; heading: number; pitch: number }
+
 interface Props {
   trails: Trail[];
   showRefs: boolean;
   showSat: boolean;
   showTopo: boolean;
+  initialCam: CameraState | null;
   onPick: (slug: string) => void;
   onActiveChange: (slug: string | null) => void;
   onViewChange: (rect: { w: number; s: number; e: number; n: number } | null) => void;
+  onCameraChange: (cam: CameraState) => void;
 }
 
 const ESRI = "https://services.arcgisonline.com/ArcGIS/rest/services/";
@@ -34,7 +38,7 @@ function boundsOfLines(lines: number[][]) {
 }
 
 const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
-  const { trails, showRefs, showSat, showTopo, onPick, onActiveChange, onViewChange } = props;
+  const { trails, showRefs, showSat, showTopo, initialCam, onPick, onActiveChange, onViewChange, onCameraChange } = props;
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
   const labelsRef = useRef<Cesium.ImageryLayer | null>(null);
@@ -51,6 +55,8 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
   onPickRef.current = onPick;
   const onViewChangeRef = useRef(onViewChange);
   onViewChangeRef.current = onViewChange;
+  const onCameraChangeRef = useRef(onCameraChange);
+  onCameraChangeRef.current = onCameraChange;
 
   useEffect(() => {
     Cesium.Ion.defaultAccessToken = undefined as unknown as string;
@@ -139,15 +145,38 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
     const onceView = () => { viewer.scene.postRender.removeEventListener(onceView); emitView(); };
     viewer.scene.postRender.addEventListener(onceView);
 
+    // report the camera pose (position + orientation) so the URL can reproduce
+    // the exact view; fires after each pan/zoom/rotate settles.
+    const emitCam = () => {
+      const c = viewer.camera;
+      const p = c.positionCartographic;
+      onCameraChangeRef.current({
+        lng: Cesium.Math.toDegrees(p.longitude), lat: Cesium.Math.toDegrees(p.latitude),
+        height: p.height, heading: Cesium.Math.toDegrees(c.heading), pitch: Cesium.Math.toDegrees(c.pitch),
+      });
+    };
+    viewer.camera.moveEnd.addEventListener(emitCam);
+
     // always show every trail in the area; refs reset so a StrictMode remount
     // rebuilds entities against the fresh viewer instead of skipping stale ones.
     entities.current = {};
     segEntities.current = [];
     trails.forEach((_, i) => ensureEntity(i));
     applyHighlight();
-    viewer.camera.flyTo({ destination: LITHUANIA(), duration: 0 });
+    if (initialCam) {
+      viewer.camera.setView({
+        destination: Cesium.Cartesian3.fromDegrees(initialCam.lng, initialCam.lat, initialCam.height),
+        orientation: { heading: Cesium.Math.toRadians(initialCam.heading), pitch: Cesium.Math.toRadians(initialCam.pitch), roll: 0 },
+      });
+    } else {
+      viewer.camera.flyTo({ destination: LITHUANIA(), duration: 0 });
+    }
 
-    return () => { viewer.camera.moveEnd.removeEventListener(emitView); picker.destroy(); viewer.destroy(); };
+    return () => {
+      viewer.camera.moveEnd.removeEventListener(emitView);
+      viewer.camera.moveEnd.removeEventListener(emitCam);
+      picker.destroy(); viewer.destroy();
+    };
   }, []);
 
   useEffect(() => {
