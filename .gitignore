@@ -11,6 +11,8 @@ npm-install.log
 dev.log
 tsconfig.tsbuildinfo
 
+source_data/yurii_hiking_tracks
+
 .venv
 
 .claude
