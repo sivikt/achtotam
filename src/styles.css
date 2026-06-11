@@ -95,6 +95,14 @@ button.act:hover { background: #e1e8f0; }
 #detail .dnav { flex: none; width: 28px; height: 28px; padding: 0; border: 1px solid #d3dae2; border-radius: 6px; background: #eef2f7; color: #5a6b7a; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 #detail .dnav:hover { background: #d8e9f5; color: #1b2733; border-color: #9cc2dd; }
 #detail .dnav svg { width: 16px; height: 16px; display: block; }
+#detail .dhead > .dactions { flex: none; display: flex; align-items: center; gap: 6px; }
+#detail .dshare { position: relative; flex: none; display: flex; }
+.sharemenu { position: absolute; top: 34px; right: 0; z-index: 10; display: flex; flex-direction: column; gap: 2px; padding: 4px; min-width: 148px; background: #ffffff; border: 1px solid #d3dae2; border-radius: 8px; box-shadow: 0 6px 20px rgba(27,39,51,.18); }
+.sharemenu button { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: none; border-radius: 6px; background: none; color: #1b2733; font-size: 12px; cursor: pointer; text-align: left; }
+.sharemenu button:hover { background: #eef3f8; }
+.sharemenu button svg { width: 16px; height: 16px; flex: none; display: block; }
+.sharemenu .sharenote { display: flex; align-items: center; gap: 6px; padding: 5px 9px; font-size: 11px; color: #2ecc71; }
+.sharemenu .sharenote svg { width: 13px; height: 13px; display: block; }
 #dParts { margin-top: 10px; }
 #dParts .ptitle { font-size: 12px; font-weight: 600; color: #3a4855; margin: 8px 0 6px; }
 .part { border: 1px solid #e2e8ee; border-radius: 7px; margin-bottom: 6px; overflow: hidden; }

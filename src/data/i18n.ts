@@ -5,6 +5,7 @@ export interface Strings {
   labels: string; satellite: string; topo: string; layersTitle: string; parts: string; shown: string; flyTo: string;
   start: string; finish: string; copy: string;
   grpSubjective: string; grpFacts: string;
+  share: string; linkCopied: string;
   collapse: string; openSite: string; openMap: string; loading: string;
   sortLbl: string; catLbl: string; typeLbl: string; attrLbl: string;
   allCats: string; allTypes: string; sortName: string; sortDist: string; sortDur: string;
@@ -23,6 +24,7 @@ export const I18N: Record<Lang, Strings> = {
     sortName: "Pagal pavadinimą (A–Z)", sortDist: "Pagal atstumą", sortDur: "Pagal trukmę",
     start: "Pradžia", finish: "Pabaiga", copy: "Kopijuoti koordinates",
     grpSubjective: "Subjektyvus vertinimas", grpFacts: "Faktai",
+    share: "Dalintis", linkCopied: "Nuoroda nukopijuota",
   },
   en: {
     title: "Cognitive trails", subtitle: "trails · click to show on the map",
@@ -36,6 +38,7 @@ export const I18N: Record<Lang, Strings> = {
     sortName: "Name (A–Z)", sortDist: "Distance", sortDur: "Duration",
     start: "Start", finish: "Finish", copy: "Copy coordinates",
     grpSubjective: "Subjective attitude", grpFacts: "Facts",
+    share: "Share", linkCopied: "Link copied",
   },
   ru: {
     title: "Познавательные тропы", subtitle: "троп · нажмите, чтобы показать на карте",
@@ -49,5 +52,6 @@ export const I18N: Record<Lang, Strings> = {
     sortName: "По названию (А–Я)", sortDist: "По расстоянию", sortDur: "По длительности",
     start: "Начало", finish: "Финиш", copy: "Копировать координаты",
     grpSubjective: "Субъективная оценка", grpFacts: "Факты",
+    share: "Поделиться", linkCopied: "Ссылка скопирована",
   },
 };
