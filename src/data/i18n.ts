@@ -8,7 +8,7 @@ export interface Strings {
   share: string; linkCopied: string;
   collapse: string; openSite: string; openMap: string; loading: string;
   sortLbl: string; catLbl: string; typeLbl: string; attrLbl: string;
-  allCats: string; allTypes: string; sortName: string; sortDist: string; sortDur: string;
+  allCats: string; allAttrs: string; allTypes: string; sortName: string; sortDist: string; sortDur: string;
 }
 
 export const I18N: Record<Lang, Strings> = {
@@ -20,7 +20,7 @@ export const I18N: Record<Lang, Strings> = {
     shown: "rodoma", flyTo: "Rodyti žemėlapyje", collapse: "Suskleisti / išskleisti",
     openSite: "Atidaryti nesedeknamuose.lt →", openMap: "Rodyti maršrutą „Google Maps“ →",
     loading: "Įkeliama ontologija…", sortLbl: "Rūšiuoti", catLbl: "Subjektyvios savybės", typeLbl: "Geometrija",
-    attrLbl: "Savybės", allCats: "Visos savybės", allTypes: "Bet kokia geometrija",
+    attrLbl: "Savybės", allCats: "Visos charakteristikos", allAttrs: "Visos savybės", allTypes: "Bet kokia geometrija",
     sortName: "Pagal pavadinimą (A–Z)", sortDist: "Pagal atstumą", sortDur: "Pagal trukmę",
     start: "Pradžia", finish: "Pabaiga", copy: "Kopijuoti koordinates",
     grpSubjective: "Subjektyvus vertinimas", grpFacts: "Faktai",
@@ -34,7 +34,7 @@ export const I18N: Record<Lang, Strings> = {
     shown: "shown", flyTo: "Show on map", collapse: "Collapse / expand",
     openSite: "Open on nesedeknamuose.lt →", openMap: "View route on Google Maps →",
     loading: "Loading ontology…", sortLbl: "Sort", catLbl: "Subjective characteristics", typeLbl: "Geometry",
-    attrLbl: "Attributes", allCats: "All characteristics", allTypes: "Any geometry",
+    attrLbl: "Attributes", allCats: "All characteristics", allAttrs: "All attributes", allTypes: "Any geometry",
     sortName: "Name (A–Z)", sortDist: "Distance", sortDur: "Duration",
     start: "Start", finish: "Finish", copy: "Copy coordinates",
     grpSubjective: "Subjective attitude", grpFacts: "Facts",
@@ -48,7 +48,7 @@ export const I18N: Record<Lang, Strings> = {
     shown: "показано", flyTo: "Показать на карте", collapse: "Свернуть / развернуть",
     openSite: "Открыть на nesedeknamuose.lt →", openMap: "Показать маршрут на Google Maps →",
     loading: "Загрузка онтологии…", sortLbl: "Сортировка", catLbl: "Субъективные характеристики", typeLbl: "Геометрия",
-    attrLbl: "Свойства", allCats: "Все характеристики", allTypes: "Любая геометрия",
+    attrLbl: "Свойства", allCats: "Все характеристики", allAttrs: "Все свойства", allTypes: "Любая геометрия",
     sortName: "По названию (А–Я)", sortDist: "По расстоянию", sortDur: "По длительности",
     start: "Начало", finish: "Финиш", copy: "Копировать координаты",
     grpSubjective: "Субъективная оценка", grpFacts: "Факты",

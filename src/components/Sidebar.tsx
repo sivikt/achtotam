@@ -4,6 +4,7 @@ import { I18N } from "../data/i18n";
 import { catLabels, propLabels } from "../generated/trails";
 import { colorFor, fmtQty, nameOf, pick } from "../lib/lang";
 import DetailPanel from "./DetailPanel";
+import MultiSelect from "./MultiSelect";
 import type { GalleryItem } from "./Gallery";
 
 export type SortMode = "name" | "dist" | "dur";
@@ -17,14 +18,14 @@ interface Props {
   activeSlug: string | null;
   search: string;
   sortMode: SortMode;
-  themeFilter: string;
+  themeFilter: Set<string>;
   catFilter: string;
   attrFilter: Set<string>;
   routeTypes: string[];
   detail: Trail | null;
   onSearch: (v: string) => void;
   onSort: (v: SortMode) => void;
-  onTheme: (v: string) => void;
+  onToggleTheme: (key: string) => void;
   onCat: (v: string) => void;
   onToggleAttr: (key: string) => void;
   onLang: (l: Lang) => void;
@@ -80,29 +81,20 @@ export default function Sidebar(p: Props) {
         </button>
         <button className="act" onClick={p.onResetView}>{d.loadAll}</button>
         <div id="filters">
-          <label className="fld"><span>{d.catLbl}</span>
-            <select value={p.themeFilter} onChange={(e) => p.onTheme(e.target.value)}>
-              <option value="">{d.allCats}</option>
-              {themeUris.map((u) => <option key={u} value={u}>{pick(catLabels[u], p.lang)}</option>)}
-            </select>
-          </label>
+          <div className="fld"><span>{d.catLbl}</span>
+            <MultiSelect placeholder={d.allCats} selected={p.themeFilter} onToggle={p.onToggleTheme}
+              options={themeUris.map((u) => ({ value: u, label: pick(catLabels[u], p.lang) }))} />
+          </div>
           <label className="fld"><span>{d.typeLbl}</span>
             <select value={p.catFilter} onChange={(e) => p.onCat(e.target.value)}>
               <option value="">{d.allTypes}</option>
               {p.routeTypes.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </label>
-          <details id="attrBox">
-            <summary>{d.attrLbl} <span id="attrCount">{p.attrFilter.size ? `(${p.attrFilter.size})` : ""}</span></summary>
-            <div id="attrList">
-              {attrKeys.map((k) => (
-                <label key={k}>
-                  <input type="checkbox" checked={p.attrFilter.has(k)} onChange={() => p.onToggleAttr(k)} />
-                  {pick(propLabels[k], p.lang)}
-                </label>
-              ))}
-            </div>
-          </details>
+          <div className="fld"><span>{d.attrLbl}</span>
+            <MultiSelect placeholder={d.allAttrs} selected={p.attrFilter} onToggle={p.onToggleAttr}
+              options={attrKeys.map((k) => ({ value: k, label: pick(propLabels[k], p.lang) }))} />
+          </div>
         </div>
       </div>
 

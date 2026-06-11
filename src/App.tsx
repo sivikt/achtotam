@@ -79,7 +79,8 @@ export default function App() {
   const [search, setSearch] = useState(PARAMS.get("q") || "");
   const [sortMode, setSortMode] = useState<SortMode>(
     sortParam === "dist" || sortParam === "dur" ? sortParam : "name");
-  const [themeFilter, setThemeFilter] = useState(PARAMS.get("theme") ? NS + PARAMS.get("theme") : "");
+  const [themeFilter, setThemeFilter] = useState<Set<string>>(
+    new Set((PARAMS.get("theme") || "").split(",").filter(Boolean).map((s) => NS + s)));
   const [catFilter, setCatFilter] = useState(PARAMS.get("type") || "");
   const [attrFilter, setAttrFilter] = useState<Set<string>>(
     new Set((PARAMS.get("attrs") || "").split(",").filter(Boolean)));
@@ -106,7 +107,7 @@ export default function App() {
     const f = search.trim().toLowerCase();
     const out = allTrails.filter((t) => {
       if (f && !Object.values(t.name).join(" ").toLowerCase().includes(f)) return false;
-      if (themeFilter && !t.categories.includes(themeFilter)) return false;
+      if (themeFilter.size && !t.categories.some((c) => themeFilter.has(c))) return false;
       if (catFilter && pick(t.routeType, lang) !== catFilter) return false;
       if (attrFilter.size && ![...attrFilter].every((a) => t.props.includes(a))) return false;
       if (viewRect) {
@@ -139,6 +140,12 @@ export default function App() {
     return next;
   });
 
+  const toggleTheme = (key: string) => setThemeFilter((prev) => {
+    const next = new Set(prev);
+    next.has(key) ? next.delete(key) : next.add(key);
+    return next;
+  });
+
   const onOpenSegment = (seg: Segment | null) => {
     if (seg) map.current?.highlightSegment(seg);
     else map.current?.clearSegHighlight();
@@ -151,7 +158,7 @@ export default function App() {
     if (lang !== "en") p.set("lang", lang);
     if (search) p.set("q", search);
     if (sortMode !== "name") p.set("sort", sortMode);
-    if (themeFilter) p.set("theme", themeFilter.startsWith(NS) ? themeFilter.slice(NS.length) : themeFilter);
+    if (themeFilter.size) p.set("theme", [...themeFilter].map((u) => u.startsWith(NS) ? u.slice(NS.length) : u).join(","));
     if (catFilter) p.set("type", catFilter);
     if (attrFilter.size) p.set("attrs", [...attrFilter].join(","));
     if (activeSlug) p.set("route", activeSlug);
@@ -188,7 +195,7 @@ export default function App() {
         indexOf={(t) => indexBySlug.get(t.slug)!} activeSlug={activeSlug}
         search={search} sortMode={sortMode} themeFilter={themeFilter} catFilter={catFilter}
         attrFilter={attrFilter} routeTypes={routeTypes} detail={detail}
-        onSearch={setSearch} onSort={setSortMode} onTheme={setThemeFilter} onCat={setCatFilter}
+        onSearch={setSearch} onSort={setSortMode} onToggleTheme={toggleTheme} onCat={setCatFilter}
         onToggleAttr={toggleAttr} onLang={setLang}
         onResetView={() => map.current?.resetView()}
         onSelect={(t) => selectTrail(t, false)}
