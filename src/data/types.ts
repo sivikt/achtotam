@@ -6,6 +6,12 @@ export interface Quantity {
   unit: LangMap;
 }
 
+export interface Author {
+  name: string;
+  facebook?: string;
+  instagram?: string;
+}
+
 export interface Segment {
   num: number;
   name: LangMap;
@@ -27,7 +33,8 @@ export interface Trail {
   slug: string;
   name: LangMap;
   desc: LangMap;
-  routeType: LangMap;
+  routeType: string; // ct:RouteType node URI ("" if unset); label via routeTypeLabels
+  author: string;    // foaf:Person node URI ("" if unset); details via authors
   distance: Quantity | null;
   duration: Quantity | null;
   lat: number;

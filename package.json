@@ -16,6 +16,7 @@
     "cesium": "^1.118.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-select": "^5.10.2",
     "resium": "^1.19.0-beta.1"
   },
   "devDependencies": {

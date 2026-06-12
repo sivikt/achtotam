@@ -1,15 +1,37 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Lang, Segment, Trail } from "./data/types";
-import { trails as allTrails } from "./generated/trails";
+import { trails as allTrails, routeTypeLabels } from "./generated/trails";
 import { I18N } from "./data/i18n";
 import MapView, { type CameraState, type MapHandle } from "./components/MapView";
 import Sidebar, { type SortMode } from "./components/Sidebar";
 import Gallery, { type GalleryItem } from "./components/Gallery";
-import { nameOf, pick, qtyNum } from "./lib/lang";
+import { nameOf, pick, qtyNum, slugify } from "./lib/lang";
 import { lineStringsFromWKT } from "./lib/wkt";
 
 // stable colour/index order, fixed once (matches generated order)
 const indexBySlug = new Map(allTrails.map((t, i) => [t.slug, i] as const));
+const trailBySlug = new Map(allTrails.map((t) => [t.slug, t] as const));
+
+// resolve a "route" URL value to a trail's stable slug. The URL carries the
+// trail name slugified in whatever locale was active when shared; we index every
+// locale (plus the stable slug, for old links) so any of them resolves.
+const routeIndex = (() => {
+  const m = new Map<string, string>();
+  for (const t of allTrails) {
+    m.set(t.slug, t.slug);
+    for (const lng of ["lt", "en", "ru"] as Lang[]) {
+      const s = slugify(pick(t.name, lng));
+      if (s && !m.has(s)) m.set(s, t.slug);
+    }
+  }
+  return m;
+})();
+const resolveRoute = (r: string | null) => (r ? routeIndex.get(r) ?? null : null);
+// the route value to put in the URL: trail name slugified in the active locale
+const routeSlug = (slug: string, lang: Lang) => {
+  const t = trailBySlug.get(slug);
+  return t ? slugify(nameOf(t, lang)) || slug : slug;
+};
 
 export interface ViewRect { w: number; s: number; e: number; n: number }
 
@@ -79,14 +101,17 @@ export default function App() {
   const [search, setSearch] = useState(PARAMS.get("q") || "");
   const [sortMode, setSortMode] = useState<SortMode>(
     sortParam === "dist" || sortParam === "dur" ? sortParam : "name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(PARAMS.get("dir") === "desc" ? "desc" : "asc");
   const [themeFilter, setThemeFilter] = useState<Set<string>>(
     new Set((PARAMS.get("theme") || "").split(",").filter(Boolean).map((s) => NS + s)));
-  const [catFilter, setCatFilter] = useState(PARAMS.get("type") || "");
+  const [catFilter, setCatFilter] = useState<Set<string>>(
+    new Set((PARAMS.get("type") || "").split(",").filter(Boolean).map((s) => NS + s)));
   const [attrFilter, setAttrFilter] = useState<Set<string>>(
     new Set((PARAMS.get("attrs") || "").split(",").filter(Boolean)));
-  const [activeSlug, setActiveSlug] = useState<string | null>(routeParam || null);
+  const routeResolved = resolveRoute(routeParam);
+  const [activeSlug, setActiveSlug] = useState<string | null>(routeResolved);
   const [detail, setDetail] = useState<Trail | null>(
-    () => (routeParam ? allTrails.find((t) => t.slug === routeParam) || null : null));
+    () => (routeResolved ? trailBySlug.get(routeResolved) || null : null));
   const [showRefs, setShowRefs] = useState(PARAMS.get("refs") === "1");
   const [showSat, setShowSat] = useState(PARAMS.get("sat") === "1");
   const [showTopo, setShowTopo] = useState(PARAMS.get("topo") === "1");
@@ -99,17 +124,31 @@ export default function App() {
   // the map doesn't re-render the whole app
   const camRef = useRef<string | null>(PARAMS.get("cam"));
 
+  // geometry/route-type options, keyed by the ct:RouteType node URI (a universal
+  // identifier loaded from the ontology) with a localized label. Keying on the
+  // node — not the label — keeps an active filter valid across language switches.
   const routeTypes = useMemo(() =>
-    [...new Set(allTrails.map((t) => pick(t.routeType, lang)).filter(Boolean))]
-      .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase(), lang)), [lang]);
+    Object.keys(routeTypeLabels)
+      .map((uri) => ({ value: uri, label: pick(routeTypeLabels[uri], lang) }))
+      .sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase(), lang)), [lang]);
 
-  const visible = useMemo(() => {
+  // trails matching the content filters (search/theme/type/attributes) — but NOT
+  // the map's view rectangle. This drives what's drawn on the map; the list adds
+  // the in-view narrowing on top.
+  const shownSlugs = useMemo(() => {
     const f = search.trim().toLowerCase();
-    const out = allTrails.filter((t) => {
+    return new Set(allTrails.filter((t) => {
       if (f && !Object.values(t.name).join(" ").toLowerCase().includes(f)) return false;
       if (themeFilter.size && !t.categories.some((c) => themeFilter.has(c))) return false;
-      if (catFilter && pick(t.routeType, lang) !== catFilter) return false;
+      if (catFilter.size && !catFilter.has(t.routeType)) return false;
       if (attrFilter.size && ![...attrFilter].every((a) => t.props.includes(a))) return false;
+      return true;
+    }).map((t) => t.slug));
+  }, [search, themeFilter, catFilter, attrFilter, lang]);
+
+  const visible = useMemo(() => {
+    const out = allTrails.filter((t) => {
+      if (!shownSlugs.has(t.slug)) return false;
       if (viewRect) {
         const p = trailPoints.get(t.slug);
         if (!p) return false;
@@ -118,13 +157,16 @@ export default function App() {
       }
       return true;
     });
+    const dir = sortDir === "desc" ? -1 : 1;
     out.sort((a, b) => {
-      if (sortMode === "dist") return qtyNum(a.distance) - qtyNum(b.distance);
-      if (sortMode === "dur") return qtyNum(a.duration) - qtyNum(b.duration);
-      return nameOf(a, lang).toLowerCase().localeCompare(nameOf(b, lang).toLowerCase(), lang);
+      let r: number;
+      if (sortMode === "dist") r = qtyNum(a.distance) - qtyNum(b.distance);
+      else if (sortMode === "dur") r = qtyNum(a.duration) - qtyNum(b.duration);
+      else r = nameOf(a, lang).toLowerCase().localeCompare(nameOf(b, lang).toLowerCase(), lang);
+      return r * dir;
     });
     return out;
-  }, [search, themeFilter, catFilter, attrFilter, sortMode, lang, viewRect]);
+  }, [shownSlugs, sortMode, sortDir, lang, viewRect]);
 
   const selectTrail = (t: Trail, fly: boolean) => {
     const i = indexBySlug.get(t.slug)!;
@@ -146,6 +188,12 @@ export default function App() {
     return next;
   });
 
+  const toggleCat = (key: string) => setCatFilter((prev) => {
+    const next = new Set(prev);
+    next.has(key) ? next.delete(key) : next.add(key);
+    return next;
+  });
+
   const onOpenSegment = (seg: Segment | null) => {
     if (seg) map.current?.highlightSegment(seg);
     else map.current?.clearSegHighlight();
@@ -158,16 +206,17 @@ export default function App() {
     if (lang !== "en") p.set("lang", lang);
     if (search) p.set("q", search);
     if (sortMode !== "name") p.set("sort", sortMode);
+    if (sortDir !== "asc") p.set("dir", sortDir);
     if (themeFilter.size) p.set("theme", [...themeFilter].map((u) => u.startsWith(NS) ? u.slice(NS.length) : u).join(","));
-    if (catFilter) p.set("type", catFilter);
+    if (catFilter.size) p.set("type", [...catFilter].map((u) => u.startsWith(NS) ? u.slice(NS.length) : u).join(","));
     if (attrFilter.size) p.set("attrs", [...attrFilter].join(","));
-    if (activeSlug) p.set("route", activeSlug);
+    if (activeSlug) p.set("route", routeSlug(activeSlug, lang));
     if (showSat) p.set("sat", "1");
     if (showTopo) p.set("topo", "1");
     if (showRefs) p.set("refs", "1");
     if (camRef.current) p.set("cam", camRef.current);
     pushUrl(p);
-  }, [lang, search, sortMode, themeFilter, catFilter, attrFilter, activeSlug, showSat, showTopo, showRefs]);
+  }, [lang, search, sortMode, sortDir, themeFilter, catFilter, attrFilter, activeSlug, showSat, showTopo, showRefs]);
 
   const onCameraChange = (cam: CameraState) => {
     camRef.current = `${cam.lng.toFixed(5)},${cam.lat.toFixed(5)},${Math.round(cam.height)},`
@@ -193,20 +242,23 @@ export default function App() {
       <Sidebar
         lang={lang} total={allTrails.length} trails={allTrails} visible={visible}
         indexOf={(t) => indexBySlug.get(t.slug)!} activeSlug={activeSlug}
-        search={search} sortMode={sortMode} themeFilter={themeFilter} catFilter={catFilter}
+        search={search} sortMode={sortMode} sortDir={sortDir} themeFilter={themeFilter} catFilter={catFilter}
         attrFilter={attrFilter} routeTypes={routeTypes} detail={detail}
-        onSearch={setSearch} onSort={setSortMode} onToggleTheme={toggleTheme} onCat={setCatFilter}
+        onSearch={setSearch} onSort={setSortMode} onToggleDir={() => setSortDir((v) => (v === "asc" ? "desc" : "asc"))}
+        onToggleTheme={toggleTheme} onToggleCat={toggleCat}
         onToggleAttr={toggleAttr} onLang={setLang}
+        onClearFilters={() => { setThemeFilter(new Set()); setCatFilter(new Set()); setAttrFilter(new Set()); }}
         onResetView={() => map.current?.resetView()}
         onSelect={(t) => selectTrail(t, false)}
         onFly={(t) => selectTrail(t, true)}
+        onHover={(t) => map.current?.setHover(t ? indexBySlug.get(t.slug)! : null)}
         onCloseDetail={() => setDetail(null)}
         onNavigate={(t) => selectTrail(t, true)}
         onOpenSegment={onOpenSegment}
         onOpenGallery={(items, index) => setGallery({ items, index })}
       />
       <div id="cesiumWrap">
-        <MapView ref={map} trails={allTrails} showRefs={showRefs} showSat={showSat} showTopo={showTopo}
+        <MapView ref={map} trails={allTrails} shownSlugs={shownSlugs} showRefs={showRefs} showSat={showSat} showTopo={showTopo}
           initialCam={initialCam} onCameraChange={onCameraChange}
           onPick={(slug) => { const t = allTrails.find((x) => x.slug === slug); if (t) selectTrail(t, false); }}
           onActiveChange={setActiveSlug} onViewChange={setViewRect} />

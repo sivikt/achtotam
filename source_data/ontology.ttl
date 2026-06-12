@@ -8,6 +8,7 @@
 @prefix schema:    <https://schema.org/> .
 @prefix geo:       <http://www.w3.org/2003/01/geo/wgs84_pos#> .
 @prefix geosparql: <http://www.opengis.net/ont/geosparql#> .
+@prefix unit:      <http://qudt.org/vocab/unit/> .
 
 ct: a owl:Ontology ;
     dcterms:title "Cognitive Trails Ontology"@en , "Pažintinių takų ontologija"@lt , "Онтология познавательных троп"@ru ;
@@ -21,29 +22,43 @@ ct:Trail a owl:Class ;
 
 ct:gpxFile a owl:DatatypeProperty ; rdfs:domain ct:Trail ; rdfs:range xsd:anyURI ;
     rdfs:label "GPX file"@en , "GPX failas"@lt , "GPX файл"@ru .
-ct:routeType a owl:DatatypeProperty ; rdfs:domain ct:Trail ; rdfs:range rdf:langString ;
+ct:routeType a owl:ObjectProperty ; rdfs:domain ct:Trail ; rdfs:range ct:RouteType ;
     rdfs:label "geometry"@en , "geometrija"@lt , "геометрия"@ru .
 
+# route geometry as a controlled vocabulary: each value is a node (universal
+# identifier) carrying multilingual labels, mirroring ct:Category.
+ct:RouteType a owl:Class ;
+    rdfs:label "Route geometry"@en , "Maršruto geometrija"@lt , "Геометрия маршрута"@ru .
+ct:rt-circular a ct:RouteType ;
+    rdfs:label "Circular route"@en , "Žiedinis maršrutas"@lt , "Круговой маршрут"@ru .
+ct:rt-linear a ct:RouteType ;
+    rdfs:label "Linear route"@en , "Linijinis maršrutas"@lt , "Линейный маршрут"@ru .
+
+# trail authorship: each author is a foaf:Person node (universal identifier) with
+# a name and social profiles (schema:sameAs); the host distinguishes FB/Instagram.
+ct:author a owl:ObjectProperty ; rdfs:domain ct:Trail ; rdfs:range foaf:Person ;
+    rdfs:label "author"@en , "autorius"@lt , "автор"@ru .
+ct:author-ramunas a foaf:Person ;
+    foaf:name "Ramūnas Šukauskas" ;
+    schema:sameAs <https://www.facebook.com/nesedeknamuos> ,
+                  <https://www.instagram.com/nesedeknamuose> .
+
 # --- measured quantities (value + unit) ---
-ct:Quantity a owl:Class ;
-    rdfs:label "Quantity"@en , "Dydis"@lt , "Величина"@ru ;
-    rdfs:comment "A measured value paired with its unit of measure."@en .
-ct:Unit a owl:Class ;
-    rdfs:label "Unit of measure"@en , "Matavimo vienetas"@lt , "Единица измерения"@ru .
-ct:value a owl:DatatypeProperty ; rdfs:domain ct:Quantity ; rdfs:range xsd:decimal ;
-    rdfs:label "value"@en , "reikšmė"@lt , "значение"@ru .
-ct:unit a owl:ObjectProperty ; rdfs:domain ct:Quantity ; rdfs:range ct:Unit ;
-    rdfs:label "unit"@en , "matavimo vienetas"@lt , "единица измерения"@ru .
-ct:distance a owl:ObjectProperty ; rdfs:domain ct:Trail ; rdfs:range ct:Quantity ;
+# Reuse schema.org's QuantitativeValue (value + unit) rather than inventing our
+# own quantity vocabulary. Distances/durations are inline blank nodes in the data.
+ct:distance a owl:ObjectProperty ; rdfs:domain ct:Trail ; rdfs:range schema:QuantitativeValue ;
     rdfs:label "distance"@en , "atstumas"@lt , "расстояние"@ru .
-ct:duration a owl:ObjectProperty ; rdfs:domain ct:Trail ; rdfs:range ct:Quantity ;
+ct:duration a owl:ObjectProperty ; rdfs:domain ct:Trail ; rdfs:range schema:QuantitativeValue ;
     rdfs:label "duration"@en , "trukmė"@lt , "продолжительность"@ru .
 
-# unit individuals — each carries a multilingual rdfs:label
-ct:unit-km a ct:Unit ;
-    rdfs:label "km"@en , "km"@lt , "км"@ru .
-ct:unit-hour a ct:Unit ;
-    rdfs:label "h"@en , "val."@lt , "ч"@ru .
+# Units are QUDT individuals (a standard units ontology); we only annotate them
+# with localized labels for display. schema:unitCode on each quantity points here.
+unit:KiloM rdfs:label "km"@en , "km"@lt , "км"@ru .
+unit:HR    rdfs:label "h"@en , "val."@lt , "ч"@ru .
+
+# rdfs:label and schema:name denote the same thing — declare them equivalent so
+# either may be used interchangeably for display names.
+rdfs:label owl:equivalentProperty schema:name .
 
 # --- map / external links ---
 schema:hasMap a owl:ObjectProperty ; rdfs:domain ct:Trail ; rdfs:range xsd:anyURI ;

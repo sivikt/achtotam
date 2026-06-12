@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import type { Lang, RoutePoint, Segment, Trail } from "../data/types";
 import type { GalleryItem } from "./Gallery";
 import { I18N } from "../data/i18n";
-import { catLabels, propLabels } from "../generated/trails";
-import { fmtQty, nameOf, pick } from "../lib/lang";
+import { catLabels, propLabels, routeTypeLabels, authors } from "../generated/trails";
+import { fmtQty, nameOf, pick, slugify } from "../lib/lang";
 
 interface Props {
   trail: Trail | null;
@@ -33,10 +33,16 @@ const CheckIcon = () => (
     <polyline points="20 6 9 17 4 12" />
   </svg>
 );
-const ShareIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
-    <line x1="8.6" y1="10.5" x2="15.4" y2="6.5" /><line x1="8.6" y1="13.5" x2="15.4" y2="17.5" />
+// Material Symbols "location_on" (filled) — map-pin marking start/finish
+const PinIcon = () => (
+  <svg viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 11 7 11s7-5.75 7-11c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+  </svg>
+);
+// Material Symbols "more_vert" — the standard overflow / context-menu glyph
+const MenuIcon = () => (
+  <svg viewBox="0 0 24 24" fill="currentColor">
+    <circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" />
   </svg>
 );
 const TelegramIcon = () => (
@@ -47,6 +53,11 @@ const TelegramIcon = () => (
 const InstagramIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
     <rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="0.6" fill="currentColor" stroke="none" />
+  </svg>
+);
+const FacebookIcon = () => (
+  <svg viewBox="0 0 24 24" fill="currentColor">
+    <path d="M22 12a10 10 0 1 0-11.56 9.88v-6.99H7.9V12h2.54V9.8c0-2.5 1.49-3.89 3.78-3.89 1.09 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56V12h2.78l-.44 2.89h-2.34v6.99A10 10 0 0 0 22 12z" />
   </svg>
 );
 
@@ -69,35 +80,31 @@ function Thumbs({ imgs, size, onOpen }: {
 export default function DetailPanel({ trail, lang, onClose, onNavigate, onOpenSegment, onOpenGallery }: Props) {
   const [openSeg, setOpenSeg] = useState<number | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
-  const [shareOpen, setShareOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const d = I18N[lang];
 
   // reset transient state whenever the shown trail changes
-  useEffect(() => { setOpenSeg(null); setShareOpen(false); onOpenSegment(null); }, [trail?.slug]);
+  useEffect(() => { setOpenSeg(null); setMenuOpen(false); onOpenSegment(null); }, [trail?.slug]);
 
   const copyCoord = (key: string, p: RoutePoint) => {
-    navigator.clipboard?.writeText(p.address || `${p.lat}, ${p.lng}`);
+    navigator.clipboard?.writeText(`${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`);
     setCopied(key);
     setTimeout(() => setCopied((c) => (c === key ? null : c)), 1200);
   };
 
   const endpointRow = (key: "start" | "finish", label: string, p: RoutePoint) => (
     <div className={"ept " + key}>
-      <span className="pin" />
-      <span className="elbl">{label}</span>
-      <span className="ecoord">{p.lat.toFixed(5)}, {p.lng.toFixed(5)}</span>
-      <button className={"ecopy" + (copied === key ? " ok" : "")} title={d.copy} aria-label={d.copy}
-        onClick={() => copyCoord(key, p)}>
-        {copied === key ? <CheckIcon /> : <CopyIcon />}
-      </button>
-      {p.address && <span className="eaddr">· {p.address}</span>}
+      <span className="epin" title={label} aria-label={label}><PinIcon /></span>
+      <span className="eaddr">{p.address || `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`}</span>
     </div>
   );
 
   if (!trail) return null;
   const t = trail;
   const imgs = t.images.length ? t.images : t.localImages;
-  const meta = [fmtQty(t.distance, lang), fmtQty(t.duration, lang), pick(t.routeType, lang)].filter(Boolean).join(" · ");
+  const author = t.author ? authors[t.author] : null;
+  const meta = [fmtQty(t.distance, lang), fmtQty(t.duration, lang),
+    t.routeType ? pick(routeTypeLabels[t.routeType], lang) : ""].filter(Boolean).join(" · ");
 
   const toggleSeg = (k: number, seg: Segment) => {
     if (openSeg === k) { setOpenSeg(null); onOpenSegment(null); }
@@ -108,7 +115,7 @@ export default function DetailPanel({ trail, lang, onClose, onNavigate, onOpenSe
   // selected route (and camera/filters) into the query string.
   const shareUrl = () => {
     const u = new URL(window.location.href);
-    u.searchParams.set("route", t.slug);
+    u.searchParams.set("route", slugify(nameOf(t, lang)) || t.slug);
     return u.toString();
   };
   // run the full link through TinyURL (CORS-enabled, returns a clean short URL
@@ -127,14 +134,14 @@ export default function DetailPanel({ trail, lang, onClose, onNavigate, onOpenSe
     const short = await shorten(shareUrl());
     const tg = `https://t.me/share/url?url=${encodeURIComponent(short)}&text=${encodeURIComponent(nameOf(t, lang))}`;
     if (win) win.location.href = tg; else window.open(tg, "_blank", "noopener,noreferrer");
-    setShareOpen(false);
+    setMenuOpen(false);
   };
   // Instagram has no web share-link; use the native share sheet when available
   // (lets the user pick Instagram), otherwise copy the link to paste manually.
   const shareInstagram = async () => {
     const short = await shorten(shareUrl());
     if (navigator.share) {
-      try { await navigator.share({ title: nameOf(t, lang), url: short }); setShareOpen(false); return; }
+      try { await navigator.share({ title: nameOf(t, lang), url: short }); setMenuOpen(false); return; }
       catch { /* dismissed or lost activation — fall through to copy */ }
     }
     navigator.clipboard?.writeText(short);
@@ -148,14 +155,16 @@ export default function DetailPanel({ trail, lang, onClose, onNavigate, onOpenSe
         <button className="dback" title={d.loadAll} aria-label={d.loadAll} onClick={onClose}>‹</button>
         <div><h2>{nameOf(t, lang)}</h2><div className="dmeta">{meta}</div></div>
         <div className="dactions">
-          <button className="dnav" title={d.flyTo} aria-label={d.flyTo} onClick={() => onNavigate(t)}><NavIcon /></button>
+          <button className="dnav sm" title={d.flyTo} aria-label={d.flyTo} onClick={() => onNavigate(t)}><NavIcon /></button>
           <div className="dshare">
-            <button className="dnav" title={d.share} aria-label={d.share} aria-pressed={shareOpen}
-              onClick={() => setShareOpen((o) => !o)}><ShareIcon /></button>
-            {shareOpen && (
+            <button className="dnav sm" title={d.menu} aria-label={d.menu} aria-pressed={menuOpen}
+              onClick={() => setMenuOpen((o) => !o)}><MenuIcon /></button>
+            {menuOpen && (
               <div className="sharemenu">
                 <button onClick={shareTelegram}><TelegramIcon /> Telegram</button>
                 <button onClick={shareInstagram}><InstagramIcon /> Instagram</button>
+                {t.start && <button onClick={() => { copyCoord("start", t.start!); setMenuOpen(false); }}><CopyIcon /> {d.copyStart}</button>}
+                {t.finish && <button onClick={() => { copyCoord("finish", t.finish!); setMenuOpen(false); }}><CopyIcon /> {d.copyFinish}</button>}
                 {copied === "share" && <span className="sharenote"><CheckIcon /> {d.linkCopied}</span>}
               </div>
             )}
@@ -163,7 +172,11 @@ export default function DetailPanel({ trail, lang, onClose, onNavigate, onOpenSe
         </div>
       </div>
       <div className="dbody">
-        <Thumbs imgs={imgs} size="lg" onOpen={onOpenGallery} />
+        {t.start && (
+          <div className="endpoints">
+            {endpointRow("start", d.start, t.start)}
+          </div>
+        )}
         <div className="badges">
           {t.categories.length > 0 && (
             <div className="bgroup">
@@ -178,13 +191,11 @@ export default function DetailPanel({ trail, lang, onClose, onNavigate, onOpenSe
             </div>
           )}
         </div>
-        {(t.start || t.finish) && (
-          <div className="endpoints">
-            {t.start && endpointRow("start", d.start, t.start)}
-            {t.finish && endpointRow("finish", d.finish, t.finish)}
-          </div>
-        )}
-        <div className="ddesc">{pick(t.desc, lang)}</div>
+        <div className="ddesc-sec">
+          <span className="bglbl">{d.grpDesc}</span>
+          <Thumbs imgs={imgs} size="lg" onOpen={onOpenGallery} />
+          <div className="ddesc">{pick(t.desc, lang)}</div>
+        </div>
         {t.segments.length > 0 && (
           <div id="dParts">
             <div className="ptitle">{d.parts} ({t.segments.length})</div>
@@ -205,6 +216,22 @@ export default function DetailPanel({ trail, lang, onClose, onNavigate, onOpenSe
                 </div>
               );
             })}
+          </div>
+        )}
+        {author && (
+          <div className="dauthor">
+            <span className="bglbl">{d.author}</span>
+            <div className="arow">
+              <span className="aname">{author.name}</span>
+              {author.facebook && (
+                <a className="asocial" href={author.facebook} target="_blank" rel="noopener noreferrer"
+                  title="Facebook" aria-label="Facebook"><FacebookIcon /></a>
+              )}
+              {author.instagram && (
+                <a className="asocial" href={author.instagram} target="_blank" rel="noopener noreferrer"
+                  title="Instagram" aria-label="Instagram"><InstagramIcon /></a>
+              )}
+            </div>
           </div>
         )}
         {t.map && <a className="dlink" href={t.map} target="_blank" rel="noopener noreferrer">{d.openMap}</a>}

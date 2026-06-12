@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Lang, Segment, Trail } from "../data/types";
 import { I18N } from "../data/i18n";
-import { catLabels, propLabels } from "../generated/trails";
+import { catLabels, propLabels, routeTypeLabels } from "../generated/trails";
 import { colorFor, fmtQty, nameOf, pick } from "../lib/lang";
 import DetailPanel from "./DetailPanel";
 import MultiSelect from "./MultiSelect";
@@ -18,20 +18,24 @@ interface Props {
   activeSlug: string | null;
   search: string;
   sortMode: SortMode;
+  sortDir: "asc" | "desc";
   themeFilter: Set<string>;
-  catFilter: string;
+  catFilter: Set<string>;
   attrFilter: Set<string>;
-  routeTypes: string[];
+  routeTypes: { value: string; label: string }[];
   detail: Trail | null;
   onSearch: (v: string) => void;
   onSort: (v: SortMode) => void;
+  onToggleDir: () => void;
   onToggleTheme: (key: string) => void;
-  onCat: (v: string) => void;
+  onToggleCat: (key: string) => void;
   onToggleAttr: (key: string) => void;
+  onClearFilters: () => void;
   onLang: (l: Lang) => void;
   onResetView: () => void;
   onSelect: (t: Trail) => void;
   onFly: (t: Trail) => void;
+  onHover: (t: Trail | null) => void;
   onCloseDetail: () => void;
   onNavigate: (t: Trail) => void;
   onOpenSegment: (seg: Segment | null) => void;
@@ -51,7 +55,22 @@ const Funnel = () => (
   </svg>
 );
 
-// ascending/descending bars — the sort affordance on the list header
+// globe (Material Symbols "public") — reset the map to show every trail
+const GlobeIcon = () => (
+  <svg viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+  </svg>
+);
+
+// X — clear all active filters
+const ClearIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+  </svg>
+);
+
+// ascending/descending bars with a direction arrow — the sort-direction toggle.
+// flips vertically (via .up) to switch between ascending and descending.
 const SortIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
     <line x1="4" y1="6" x2="13" y2="6" /><line x1="4" y1="12" x2="11" y2="12" /><line x1="4" y1="18" x2="9" y2="18" />
@@ -67,30 +86,39 @@ export default function Sidebar(p: Props) {
   const attrKeys = Object.keys(propLabels).sort((a, b) =>
     pick(propLabels[a], p.lang).toLowerCase().localeCompare(pick(propLabels[b], p.lang).toLowerCase(), p.lang));
 
+  const hasFilters = p.themeFilter.size + p.catFilter.size + p.attrFilter.size > 0;
+
   const cls = [filtersOpen ? "filters-open" : "", p.detail ? "detail-open" : ""].filter(Boolean).join(" ");
 
   return (
     <div id="sidebar" className={cls}>
       <div id="controls">
-        <input id="search" type="search" autoComplete="off" placeholder={d.search}
-          value={p.search} onChange={(e) => p.onSearch(e.target.value)} />
-        <button className={"funnel" + (filtersOpen ? " on" : "")} aria-label={d.attrLbl}
-          aria-pressed={filtersOpen} title={d.attrLbl} onClick={() => setFiltersOpen((o) => !o)}>
+        {filtersOpen && (
+          <button className="fback" title={d.loadAll} aria-label={d.loadAll}
+            onClick={() => setFiltersOpen(false)}>‹</button>
+        )}
+        <button className={"funnel" + (filtersOpen ? " on" : "")} aria-label={d.filters}
+          title={d.filters} aria-pressed={filtersOpen} onClick={() => setFiltersOpen((o) => !o)}>
           <Funnel />
           {p.attrFilter.size > 0 && <span className="fbadge">{p.attrFilter.size}</span>}
         </button>
-        <button className="act" onClick={p.onResetView}>{d.loadAll}</button>
+        <input id="search" type="search" autoComplete="off" placeholder={d.search}
+          value={p.search} onChange={(e) => p.onSearch(e.target.value)} />
+        {hasFilters && (
+          <button className="act ico" title={d.clear} aria-label={d.clear}
+            onClick={p.onClearFilters}><ClearIcon /></button>
+        )}
+        <button className="act ico" title={d.loadAll} aria-label={d.loadAll}
+          onClick={p.onResetView}><GlobeIcon /></button>
         <div id="filters">
           <div className="fld"><span>{d.catLbl}</span>
             <MultiSelect placeholder={d.allCats} selected={p.themeFilter} onToggle={p.onToggleTheme}
               options={themeUris.map((u) => ({ value: u, label: pick(catLabels[u], p.lang) }))} />
           </div>
-          <label className="fld"><span>{d.typeLbl}</span>
-            <select value={p.catFilter} onChange={(e) => p.onCat(e.target.value)}>
-              <option value="">{d.allTypes}</option>
-              {p.routeTypes.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </label>
+          <div className="fld"><span>{d.typeLbl}</span>
+            <MultiSelect placeholder={d.allTypes} selected={p.catFilter} onToggle={p.onToggleCat}
+              options={p.routeTypes} />
+          </div>
           <div className="fld"><span>{d.attrLbl}</span>
             <MultiSelect placeholder={d.allAttrs} selected={p.attrFilter} onToggle={p.onToggleAttr}
               options={attrKeys.map((k) => ({ value: k, label: pick(propLabels[k], p.lang) }))} />
@@ -100,27 +128,30 @@ export default function Sidebar(p: Props) {
 
       <div id="count">
         <span className="cnum"><span>{p.visible.length}</span> / {p.total} {d.shown}</span>
-        <label className="sortctl" title={d.sortLbl}>
-          <SortIcon />
+        <div className="sortctl" title={d.sortLbl}>
           <select value={p.sortMode} onChange={(e) => p.onSort(e.target.value as SortMode)} aria-label={d.sortLbl}>
             <option value="name">{d.sortName}</option>
             <option value="dist">{d.sortDist}</option>
             <option value="dur">{d.sortDur}</option>
           </select>
-        </label>
+          <button className={"sortdir" + (p.sortDir === "asc" ? " up" : "")} title={d.sortDir}
+            aria-label={d.sortDir} onClick={p.onToggleDir}><SortIcon /></button>
+        </div>
       </div>
 
       <div id="list">
         {p.visible.map((t) => {
           const i = p.indexOf(t);
-          const meta = [fmtQty(t.distance, p.lang), fmtQty(t.duration, p.lang), pick(t.routeType, p.lang)].filter(Boolean).join(" · ");
+          const meta = [fmtQty(t.distance, p.lang), fmtQty(t.duration, p.lang),
+            t.routeType ? pick(routeTypeLabels[t.routeType], p.lang) : ""].filter(Boolean).join(" · ");
           return (
-            <div key={t.slug} className={"item" + (t.slug === p.activeSlug ? " active" : "")}>
+            <div key={t.slug} className={"item" + (t.slug === p.activeSlug ? " active" : "")}
+              onMouseEnter={() => p.onHover(t)} onMouseLeave={() => p.onHover(null)}>
               <div className="body" onClick={() => p.onSelect(t)}>
-                <div className="nm"><span className="dot" style={{ background: colorFor(i) }} />{nameOf(t, p.lang)}</div>
+                <div className="nm">{nameOf(t, p.lang)}</div>
                 {meta && <div className="meta">{meta}</div>}
               </div>
-              <button className="fly" title={d.flyTo} aria-label={d.flyTo}
+              <button className="fly" title={d.flyTo} aria-label={d.flyTo} style={{ borderColor: colorFor(i) }}
                 onClick={(e) => { e.stopPropagation(); p.onFly(t); }}><Reticle /></button>
             </div>
           );

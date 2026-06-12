@@ -14,5 +14,16 @@ export function nameOf(t: Trail, lang: Lang): string {
   return pick(t.name, lang);
 }
 
+// URL-friendly slug from a localized name: lowercase, drop quotes/punctuation,
+// collapse runs of non-letter/number into hyphens. Unicode letters are kept, so
+// Cyrillic/Lithuanian names stay readable in the URL (browsers decode them).
+export function slugify(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[„“”"'«»‚‘’]/g, "")
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 export const palette = ["#ff4d4d", "#ffb000", "#33cc66", "#3399ff", "#cc66ff", "#ff6699", "#00cccc", "#ff8800"];
 export const colorFor = (i: number) => palette[i % palette.length];

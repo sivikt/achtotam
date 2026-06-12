@@ -6,6 +6,7 @@ import { colorFor } from "../lib/lang";
 
 export interface MapHandle {
   showTrack: (i: number, fly: boolean) => void;
+  setHover: (i: number | null) => void;
   resetView: () => void;
   highlightSegment: (seg: Segment) => void;
   clearSegHighlight: () => void;
@@ -15,6 +16,7 @@ export interface CameraState { lng: number; lat: number; height: number; heading
 
 interface Props {
   trails: Trail[];
+  shownSlugs: Set<string>;
   showRefs: boolean;
   showSat: boolean;
   showTopo: boolean;
@@ -28,6 +30,15 @@ interface Props {
 const ESRI = "https://services.arcgisonline.com/ArcGIS/rest/services/";
 const LITHUANIA = () => Cesium.Rectangle.fromDegrees(20.9, 53.9, 26.9, 56.5);
 
+// Material Symbols "location_on" pin — same sign the detail panel uses for the
+// start/finish addresses. Rendered to an SVG data URI so Cesium can show it as a
+// billboard, tinted per endpoint (green start, red finish) with a white outline.
+const PIN_PATH = "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 11 7 11s7-5.75 7-11c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z";
+const pinImage = (fill: string) =>
+  "data:image/svg+xml;base64," + btoa(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32">`
+    + `<path d="${PIN_PATH}" fill="${fill}" stroke="#ffffff" stroke-width="1.2"/></svg>`);
+
 type Ent = Cesium.Entity & { trailSlug?: string; _baseColor?: Cesium.Color };
 
 function boundsOfLines(lines: number[][]) {
@@ -38,7 +49,7 @@ function boundsOfLines(lines: number[][]) {
 }
 
 const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
-  const { trails, showRefs, showSat, showTopo, initialCam, onPick, onActiveChange, onViewChange, onCameraChange } = props;
+  const { trails, shownSlugs, showRefs, showSat, showTopo, initialCam, onPick, onActiveChange, onViewChange, onCameraChange } = props;
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
   const labelsRef = useRef<Cesium.ImageryLayer | null>(null);
@@ -49,6 +60,7 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
   const segEntities = useRef<Ent[]>([]);
   const endpointEntities = useRef<Ent[]>([]);
   const activeSlug = useRef<string | null>(null);
+  const hoverSlug = useRef<string | null>(null);
 
   // keep callbacks fresh for the picker/camera closures
   const onPickRef = useRef(onPick);
@@ -163,6 +175,7 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
     segEntities.current = [];
     trails.forEach((_, i) => ensureEntity(i));
     applyHighlight();
+    applyVisibility();
     if (initialCam) {
       viewer.camera.setView({
         destination: Cesium.Cartesian3.fromDegrees(initialCam.lng, initialCam.lat, initialCam.height),
@@ -185,10 +198,20 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
   }, [showRefs]);
   useEffect(() => { if (satRef.current) satRef.current.show = showSat; }, [showSat]);
   useEffect(() => { if (topoRef.current) topoRef.current.show = showTopo; }, [showTopo]);
+  // hide trails that don't match the current content filters (search/theme/type/attrs)
+  useEffect(() => { applyVisibility(); }, [shownSlugs]);
+
+  function applyVisibility() {
+    for (const slug in entities.current) {
+      const show = shownSlugs.has(slug);
+      const arr = Array.isArray(entities.current[slug]) ? (entities.current[slug] as Ent[]) : [entities.current[slug] as Ent];
+      for (const e of arr) e.show = show;
+    }
+  }
 
   function applyHighlight() {
     for (const slug in entities.current) {
-      const on = slug === activeSlug.current;
+      const on = slug === activeSlug.current || slug === hoverSlug.current;
       const arr = Array.isArray(entities.current[slug]) ? (entities.current[slug] as Ent[]) : [entities.current[slug] as Ent];
       for (const e of arr) {
         const base = e._baseColor || Cesium.Color.WHITE;
@@ -247,9 +270,9 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
     const add = (p: { lng: number; lat: number }, css: string) => {
       const e = viewer.entities.add({
         position: Cesium.Cartesian3.fromDegrees(p.lng, p.lat),
-        point: {
-          pixelSize: 13, color: Cesium.Color.fromCssColorString(css),
-          outlineColor: Cesium.Color.WHITE, outlineWidth: 2,
+        billboard: {
+          image: pinImage(css), width: 30, height: 30,
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
       }) as Ent;
@@ -277,6 +300,12 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
         const offset = new Cesium.HeadingPitchRange(viewer.camera.heading, viewer.camera.pitch, 0);
         viewer.flyTo(e as Ent | Ent[], { duration: 1.2, offset });
       }
+    },
+    setHover(i) {
+      const next = i == null ? null : trails[i].slug;
+      if (next === hoverSlug.current) return;
+      hoverSlug.current = next;
+      applyHighlight();
     },
     resetView() {
       trails.forEach((_, i) => ensureEntity(i));
