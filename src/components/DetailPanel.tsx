@@ -39,6 +39,16 @@ const PinIcon = () => (
     <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 11 7 11s7-5.75 7-11c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
   </svg>
 );
+// Google Maps brand logo (official multicolor pin)
+const MapIcon = () => (
+  <svg viewBox="0 0 256 367">
+    <path fill="#34A853" d="M70.585 271.865c10.614 13.526 20.275 27.774 28.911 42.642 7.374 13.982 10.448 23.463 15.838 40.31 3.304 9.308 6.291 12.086 12.713 12.086 6.998 0 10.173-4.726 12.626-12.035 5.094-15.91 9.091-28.052 15.397-39.524 12.374-22.15 27.749-41.833 42.858-60.751 4.09-5.354 30.534-36.545 42.439-61.155 0 0 14.632-27.035 14.632-64.792 0-35.318-14.43-59.813-14.43-59.813l-41.545 11.126-25.231 66.451-6.241 9.163-1.248 1.66-1.66 2.077-2.915 3.319-4.163 4.163-22.468 18.305-56.17 32.432-9.343 54.337z" />
+    <path fill="#FBBC04" d="M12.612 188.892c13.709 31.313 40.145 58.839 58.031 82.995l95.002-112.534s-13.384 17.504-37.663 17.504c-27.042 0-48.89-21.595-48.89-48.825 0-18.672 11.234-31.501 11.234-31.501l-64.489 17.28-13.225 75.081z" />
+    <path fill="#4285F4" d="M166.705 5.787c31.552 10.173 58.558 31.53 74.893 63.024l-75.925 90.477s11.234-13.059 11.234-31.616c0-27.865-23.463-48.681-48.81-48.681-23.969 0-37.735 17.475-37.735 17.475v-57l76.343-33.68z" />
+    <path fill="#1A73E8" d="M30.015 45.765C48.861 23.218 82.021 0 127.736 0c22.18 0 38.89 5.823 38.89 5.823L90.29 96.516H36.205l-6.19-50.751z" />
+    <path fill="#EA4335" d="M12.612 188.892S0 164.194 0 128.414c0-33.817 13.146-63.377 30.015-82.649l60.318 50.758-77.721 92.369z" />
+  </svg>
+);
 // Material Symbols "more_vert" — the standard overflow / context-menu glyph
 const MenuIcon = () => (
   <svg viewBox="0 0 24 24" fill="currentColor">
@@ -161,8 +171,9 @@ export default function DetailPanel({ trail, lang, onClose, onNavigate, onOpenSe
               onClick={() => setMenuOpen((o) => !o)}><MenuIcon /></button>
             {menuOpen && (
               <div className="sharemenu">
-                <button onClick={shareTelegram}><TelegramIcon /> Telegram</button>
-                <button onClick={shareInstagram}><InstagramIcon /> Instagram</button>
+                <button onClick={shareTelegram}><TelegramIcon /> {d.shareTelegram}</button>
+                <button onClick={shareInstagram}><InstagramIcon /> {d.shareInstagram}</button>
+                {t.map && <button onClick={() => { window.open(t.map, "_blank", "noopener,noreferrer"); setMenuOpen(false); }}><MapIcon /> {d.openMap}</button>}
                 {t.start && <button onClick={() => { copyCoord("start", t.start!); setMenuOpen(false); }}><CopyIcon /> {d.copyStart}</button>}
                 {t.finish && <button onClick={() => { copyCoord("finish", t.finish!); setMenuOpen(false); }}><CopyIcon /> {d.copyFinish}</button>}
                 {copied === "share" && <span className="sharenote"><CheckIcon /> {d.linkCopied}</span>}
@@ -234,7 +245,6 @@ export default function DetailPanel({ trail, lang, onClose, onNavigate, onOpenSe
             </div>
           </div>
         )}
-        {t.map && <a className="dlink" href={t.map} target="_blank" rel="noopener noreferrer">{d.openMap}</a>}
         {t.link && <a className="dlink" href={t.link} target="_blank" rel="noopener noreferrer">{d.openSite}</a>}
       </div>
     </div>
