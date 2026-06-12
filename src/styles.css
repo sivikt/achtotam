@@ -88,13 +88,21 @@ button.act.ico svg { width: 17px; height: 17px; display: block; }
 /* match the layers buttons: rounded, translucent, frosted */
 .cesium-viewer-fullscreenContainer { top: 12px; right: 12px; bottom: auto; left: auto; width: 34px; height: 34px; }
 .cesium-viewer-fullscreenContainer .cesium-button {
-  width: 34px; height: 34px; margin: 0; padding: 6px;
+  width: 34px; height: 34px; margin: 0; padding: 0;
   border-radius: 6px; border: none;
-  background: rgba(20,28,38,.55); color: #c6d3de; fill: #c6d3de;
+  background-color: rgba(20,28,38,.55);
   box-shadow: none;
   backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  /* replace Cesium's thick default glyph with a thin, elegant maximize icon */
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c6d3de' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><polyline points='15 3 21 3 21 9'/><polyline points='9 21 3 21 3 15'/><line x1='21' y1='3' x2='14' y2='10'/><line x1='3' y1='21' x2='10' y2='14'/></svg>");
+  background-repeat: no-repeat; background-position: center; background-size: 17px;
 }
-.cesium-viewer-fullscreenContainer .cesium-button:hover { background: rgba(31,49,64,.7); fill: #e6edf3; }
+/* hide Cesium's built-in SVG so only our background-image icon shows */
+.cesium-viewer-fullscreenContainer .cesium-button svg { display: none; }
+.cesium-viewer-fullscreenContainer .cesium-button:hover {
+  background-color: rgba(31,49,64,.7);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e6edf3' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><polyline points='15 3 21 3 21 9'/><polyline points='9 21 3 21 3 15'/><line x1='21' y1='3' x2='14' y2='10'/><line x1='3' y1='21' x2='10' y2='14'/></svg>");
+}
 #detail { flex: 1; min-height: 0; display: flex; flex-direction: column; background: #ffffff; color: #1b2733; }
 #detail .dhead { padding: 11px 14px; border-bottom: 1px solid #e2e8ee; display: flex; gap: 8px; align-items: center; }
 #detail .dhead > div { flex: 1; min-width: 0; }
