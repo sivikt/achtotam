@@ -2,7 +2,7 @@ import type { Lang } from "./types";
 
 export interface Strings {
   title: string; subtitle: string; search: string; loadAll: string; clear: string;
-  labels: string; satellite: string; topo: string; layersTitle: string; parts: string; shown: string; flyTo: string;
+  labels: string; satellite: string; topo: string; layersTitle: string; language: string; parts: string; shown: string; flyTo: string;
   start: string; finish: string; copy: string; copyStart: string; copyFinish: string; menu: string;
   grpSubjective: string; grpFacts: string; grpDesc: string;
   share: string; shareTelegram: string; shareInstagram: string; linkCopied: string; author: string;
@@ -16,7 +16,7 @@ export const I18N: Record<Lang, Strings> = {
     title: "Pažintiniai takai", subtitle: "trasų · spustelėkite, kad parodytumėte žemėlapyje",
     search: "Ieškoti…", loadAll: "Rodyti visus", clear: "Išvalyti",
     labels: "Pavadinimai, keliai ir transportas",
-    satellite: "Palydovinis vaizdas", topo: "Topografinis žemėlapis", layersTitle: "Sluoksniai", parts: "Atkarpos",
+    satellite: "Palydovinis vaizdas", topo: "Topografinis žemėlapis", layersTitle: "Sluoksniai", language: "Kalba", parts: "Atkarpos",
     shown: "rodoma", flyTo: "Rodyti žemėlapyje", collapse: "Suskleisti / išskleisti",
     openSite: "Atidaryti nesedeknamuose.lt →", openMap: "„Google“",
     loading: "Įkeliama ontologija…", sortLbl: "Rūšiuoti", catLbl: "Subjektyvios savybės", typeLbl: "Geometrija", filters: "Filtrai",
@@ -31,7 +31,7 @@ export const I18N: Record<Lang, Strings> = {
     title: "Cognitive trails", subtitle: "trails · click to show on the map",
     search: "Search…", loadAll: "Show all", clear: "Clear",
     labels: "Labels, roads & transport",
-    satellite: "Satellite imagery", topo: "Topographic map", layersTitle: "Layers", parts: "Sections",
+    satellite: "Satellite imagery", topo: "Topographic map", layersTitle: "Layers", language: "Language", parts: "Sections",
     shown: "shown", flyTo: "Show on map", collapse: "Collapse / expand",
     openSite: "Open on nesedeknamuose.lt →", openMap: "in Google",
     loading: "Loading ontology…", sortLbl: "Sort", catLbl: "Subjective characteristics", typeLbl: "Geometry", filters: "Filters",
@@ -46,7 +46,7 @@ export const I18N: Record<Lang, Strings> = {
     title: "Познавательные тропы", subtitle: "троп · нажмите, чтобы показать на карте",
     search: "Поиск…", loadAll: "Показать все", clear: "Очистить",
     labels: "Названия, дороги и транспорт",
-    satellite: "Спутниковый снимок", topo: "Топографическая карта", layersTitle: "Слои", parts: "Участки",
+    satellite: "Спутниковый снимок", topo: "Топографическая карта", layersTitle: "Слои", language: "Язык", parts: "Участки",
     shown: "показано", flyTo: "Показать на карте", collapse: "Свернуть / развернуть",
     openSite: "Открыть на nesedeknamuose.lt →", openMap: "В Google",
     loading: "Загрузка онтологии…", sortLbl: "Сортировка", catLbl: "Субъективные характеристики", typeLbl: "Геометрия", filters: "Фильтры",

@@ -31,7 +31,6 @@ interface Props {
   onToggleCat: (key: string) => void;
   onToggleAttr: (key: string) => void;
   onClearFilters: () => void;
-  onLang: (l: Lang) => void;
   onResetView: () => void;
   onSelect: (t: Trail) => void;
   onFly: (t: Trail) => void;
@@ -171,12 +170,6 @@ export default function Sidebar(p: Props) {
         <DetailPanel trail={p.detail} lang={p.lang} onClose={p.onCloseDetail}
           onNavigate={p.onNavigate} onOpenSegment={p.onOpenSegment} onOpenGallery={p.onOpenGallery} />
       )}
-
-      <div id="langs">
-        {(["lt", "en", "ru"] as Lang[]).map((l) => (
-          <button key={l} className={l === p.lang ? "on" : ""} onClick={() => p.onLang(l)}>{l.toUpperCase()}</button>
-        ))}
-      </div>
     </div>
   );
 }

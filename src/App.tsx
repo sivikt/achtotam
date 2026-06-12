@@ -66,6 +66,13 @@ const RefsIcon = () => (
     <path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z" />
   </svg>
 );
+// Material Symbols "language" — globe with meridians, the standard locale glyph
+const LanguageIcon = () => (
+  <svg viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm6.93 6h-2.95c-.32-1.25-.78-2.45-1.38-3.56 1.84.63 3.37 1.91 4.33 3.56zM12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96zM4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2 0 .68.06 1.34.14 2H4.26zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56-1.84-.63-3.37-1.9-4.33-3.56zm2.95-8H5.08c.96-1.66 2.49-2.93 4.33-3.56C8.81 5.55 8.35 6.75 8.03 8zM12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96zM14.34 14H9.66c-.09-.66-.16-1.32-.16-2 0-.68.07-1.35.16-2h4.68c.09.65.16 1.32.16 2 0 .68-.07 1.34-.16 2zm.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95c-.96 1.65-2.49 2.93-4.33 3.56zM16.36 14c.08-.66.14-1.32.14-2 0-.68-.06-1.34-.14-2h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2h-3.38z" />
+  </svg>
+);
+
 // terrain / contour lines glyph for the topographic layer
 const TopoIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -116,6 +123,8 @@ export default function App() {
   const [showSat, setShowSat] = useState(PARAMS.get("sat") === "1");
   const [showTopo, setShowTopo] = useState(PARAMS.get("topo") === "1");
   const [layersOpen, setLayersOpen] = useState(false);
+  const [langOpen, setLangOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [gallery, setGallery] = useState<{ items: GalleryItem[]; index: number } | null>(null);
   const [viewRect, setViewRect] = useState<ViewRect | null>(null);
 
@@ -238,7 +247,7 @@ export default function App() {
   const d = I18N[lang];
 
   return (
-    <div id="app">
+    <div id="app" className={sidebarOpen ? "" : "sidebar-collapsed"}>
       <Sidebar
         lang={lang} total={allTrails.length} trails={allTrails} visible={visible}
         indexOf={(t) => indexBySlug.get(t.slug)!} activeSlug={activeSlug}
@@ -246,7 +255,7 @@ export default function App() {
         attrFilter={attrFilter} routeTypes={routeTypes} detail={detail}
         onSearch={setSearch} onSort={setSortMode} onToggleDir={() => setSortDir((v) => (v === "asc" ? "desc" : "asc"))}
         onToggleTheme={toggleTheme} onToggleCat={toggleCat}
-        onToggleAttr={toggleAttr} onLang={setLang}
+        onToggleAttr={toggleAttr}
         onClearFilters={() => { setThemeFilter(new Set()); setCatFilter(new Set()); setAttrFilter(new Set()); }}
         onResetView={() => map.current?.resetView()}
         onSelect={(t) => selectTrail(t, false)}
@@ -257,6 +266,10 @@ export default function App() {
         onOpenSegment={onOpenSegment}
         onOpenGallery={(items, index) => setGallery({ items, index })}
       />
+      <button className="sidebar-toggle" title={d.collapse} aria-label={d.collapse}
+        aria-pressed={!sidebarOpen} onClick={() => setSidebarOpen((o) => !o)}>
+        <span className="chev">{sidebarOpen ? "‹" : "›"}</span>
+      </button>
       <div id="cesiumWrap">
         <MapView ref={map} trails={allTrails} shownSlugs={shownSlugs} showRefs={showRefs} showSat={showSat} showTopo={showTopo}
           initialCam={initialCam} onCameraChange={onCameraChange}
@@ -281,6 +294,20 @@ export default function App() {
                 aria-label={d.labels} aria-pressed={showRefs} onClick={() => setShowRefs((s) => !s)}>
                 <RefsIcon />
               </button>
+            </div>
+          )}
+        </div>
+        <div id="langCtl">
+          <button className={"layers-btn" + (langOpen ? " on" : "")} title={d.language}
+            aria-label={d.language} aria-pressed={langOpen} onClick={() => setLangOpen((o) => !o)}>
+            <LanguageIcon />
+          </button>
+          {langOpen && (
+            <div className="langmenu">
+              {([["lt", "Lietuvių"], ["en", "English"], ["ru", "Русский"]] as [Lang, string][]).map(([code, name]) => (
+                <button key={code} className={code === lang ? "on" : ""}
+                  onClick={() => { setLang(code); setLangOpen(false); }}>{name}</button>
+              ))}
             </div>
           )}
         </div>

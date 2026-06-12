@@ -163,7 +163,7 @@ export default function DetailPanel({ trail, lang, onClose, onNavigate, onOpenSe
     <div id="detail" className="open">
       <div className="dhead">
         <button className="dback" title={d.loadAll} aria-label={d.loadAll} onClick={onClose}>‹</button>
-        <div><h2>{nameOf(t, lang)}</h2><div className="dmeta">{meta}</div></div>
+        <div><h2>{nameOf(t, lang)}</h2>{meta && <div className="dmeta">{meta}</div>}</div>
         <div className="dactions">
           <button className="dnav sm" title={d.flyTo} aria-label={d.flyTo} onClick={() => onNavigate(t)}><NavIcon /></button>
           <div className="dshare">
