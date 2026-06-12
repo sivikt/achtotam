@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Lang, Segment, Trail } from "../data/types";
 import { I18N } from "../data/i18n";
 import { catLabels, propLabels, routeTypeLabels } from "../generated/trails";
@@ -90,6 +90,14 @@ export default function Sidebar(p: Props) {
 
   const cls = [filtersOpen ? "filters-open" : "", p.detail ? "detail-open" : ""].filter(Boolean).join(" ");
 
+  // keep the selected track in view: scroll to it once the list is showing again
+  // (it's display:none behind the detail/filters panels, where scrolling is a no-op)
+  const activeRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (p.detail || filtersOpen) return;
+    activeRef.current?.scrollIntoView({ block: "nearest" });
+  }, [p.detail, filtersOpen, p.activeSlug]);
+
   return (
     <div id="sidebar" className={cls}>
       <div id="controls">
@@ -145,7 +153,8 @@ export default function Sidebar(p: Props) {
           const meta = [fmtQty(t.distance, p.lang), fmtQty(t.duration, p.lang),
             t.routeType ? pick(routeTypeLabels[t.routeType], p.lang) : ""].filter(Boolean).join(" · ");
           return (
-            <div key={t.slug} className={"item" + (t.slug === p.activeSlug ? " active" : "")}
+            <div key={t.slug} ref={t.slug === p.activeSlug ? activeRef : null}
+              className={"item" + (t.slug === p.activeSlug ? " active" : "")}
               onMouseEnter={() => p.onHover(t)} onMouseLeave={() => p.onHover(null)}>
               <div className="body" onClick={() => p.onSelect(t)}>
                 <div className="nm">{nameOf(t, p.lang)}</div>
