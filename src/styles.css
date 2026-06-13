@@ -2,7 +2,7 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 #app { display: flex; height: 100vh; overflow: hidden; position: relative; }
 /* edge tab to collapse/expand the left panel; rides the sidebar/map boundary and
    slides to the far left when the panel is hidden so the map fills the width */
-.sidebar-toggle { position: absolute; top: 50%; left: 340px; transform: translateY(-50%); z-index: 7;
+.sidebar-toggle { position: absolute; top: 50%; left: var(--sidebar-w, 340px); transform: translateY(-50%); z-index: 7;
   width: 18px; height: 48px; display: flex; align-items: center; justify-content: center; padding: 0;
   border: 1px solid #d3dae2; border-left: none; border-radius: 0 8px 8px 0;
   background: #ffffff; color: #5a6b7a; cursor: pointer; font-size: 18px; line-height: 1;
@@ -10,7 +10,13 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 .sidebar-toggle:hover { background: #eef3f8; color: #1b2733; }
 #app.sidebar-collapsed #sidebar { display: none; }
 #app.sidebar-collapsed .sidebar-toggle { left: 0; }
-#sidebar { width: 340px; flex: none; background: #ffffff; color: #1b2733; display: flex; flex-direction: column; }
+#app.sidebar-collapsed .sidebar-resizer { display: none; }
+/* desktop drag seam on the sidebar/map boundary; widens the hit area around the
+   1px line so it's easy to grab */
+.sidebar-resizer { position: absolute; top: 0; bottom: 0; left: var(--sidebar-w, 340px);
+  width: 8px; transform: translateX(-4px); z-index: 6; cursor: col-resize; }
+.sidebar-resizer:hover { background: rgba(58,110,165,.25); }
+#sidebar { width: var(--sidebar-w, 340px); flex: none; background: #ffffff; color: #1b2733; display: flex; flex-direction: column; }
 /* language picker rides the top-right toolbar, immediately left of the fullscreen
    button: a standard language icon dropping down the three languages, each named
    in its own language. (Fullscreen is 34px wide at right:12, so sit at right:52.) */
@@ -54,12 +60,34 @@ button.act.ico svg { width: 17px; height: 17px; display: block; }
 #sidebar.detail-open #filters { display: none; }
 #filters .fld { display: flex; flex-direction: column; align-items: stretch; gap: 4px; font-size: 12px; color: #3a4855; }
 #filters .fld span { flex: none; font-weight: 600; }
-#layersCtl { position: absolute; top: 12px; left: 12px; z-index: 6; display: flex; align-items: center; gap: 6px; }
+/* two stacked top-left controls: a Basemap picker and a Layers (overlays) toggle,
+   each opening its own popup anchored to the right of the button column */
+#layersCtl { position: absolute; top: 12px; left: 12px; z-index: 6; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .layers-btn { width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; padding: 0; border-radius: 6px; border: none; background: rgba(20,28,38,.55); color: #c6d3de; cursor: pointer; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
 .layers-btn:hover { background: rgba(31,49,64,.7); color: #e6edf3; }
 .layers-btn.on { background: rgba(58,110,165,.85); color: #fff; }
 .layers-btn svg { width: 18px; height: 18px; display: block; }
-#layers { display: flex; align-items: center; gap: 6px; }
+/* basemap gallery: scrollable 2-col thumbnail grid, single-select */
+.basemap-gallery { position: absolute; top: 0; left: 44px; z-index: 10;
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; padding: 8px;
+  width: 236px; max-height: 76vh; overflow-y: auto;
+  background: rgba(20,28,38,.92); border-radius: 10px; box-shadow: 0 8px 28px rgba(0,0,0,.4);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.bm-item { display: flex; flex-direction: column; gap: 3px; padding: 0; border: 2px solid transparent;
+  border-radius: 7px; background: none; color: #c6d3de; cursor: pointer; font-size: 10px; text-align: center; overflow: hidden; }
+.bm-item img { width: 100%; height: 64px; object-fit: cover; border-radius: 5px; display: block; background: #33414f; }
+.bm-item span { padding: 0 2px 3px; line-height: 1.2; }
+.bm-item:hover { color: #e6edf3; }
+.bm-item.on { border-color: #6fb6ff; color: #fff; }
+/* overlays: vertical toggle rows, styled like the language menu */
+.layers-list { position: absolute; top: 40px; left: 44px; z-index: 10;
+  display: flex; flex-direction: column; gap: 2px; padding: 4px; min-width: 168px;
+  background: rgba(20,28,38,.92); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.4);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.layers-list button { display: block; width: 100%; text-align: left; padding: 7px 9px; border: none;
+  border-radius: 6px; background: none; color: #c6d3de; font-size: 12px; cursor: pointer; }
+.layers-list button:hover { background: rgba(31,49,64,.7); color: #e6edf3; }
+.layers-list button.on { background: rgba(58,110,165,.85); color: #fff; font-weight: 600; }
 #list { flex: 1; overflow-y: auto; }
 .item { padding: 9px 16px; border-bottom: 1px solid #eceff3; cursor: pointer; display: flex; align-items: center; gap: 8px; }
 .item:hover { background: #eef3f8; }
@@ -186,22 +214,26 @@ button.act.ico svg { width: 17px; height: 17px; display: block; }
 /* ---- mobile: map on top, tracks/filters/detail in a bottom sheet ---- */
 @media (max-width: 768px) {
   html, body, #root { height: 100dvh; overflow: hidden; }
-  /* dvh tracks the real viewport (excludes the browser address bar) so the two
-     fixed halves always add up to the screen — no page scroll, no hidden sidebar */
+  /* dvh tracks the real viewport (excludes the browser address bar) */
   #app { flex-direction: column; height: 100dvh; overflow: hidden; }
-  /* explicit halves: the Cesium canvas can't grow to its intrinsic size and shove
-     the sidebar off-screen the way an auto-sized flex item would */
-  #cesiumWrap { order: 1; flex: none; height: 50dvh; }
-  #sidebar { order: 2; width: 100%; height: 50dvh; flex: none; min-height: 0;
-    border-top: 1px solid #e2e8ee; border-radius: 14px 14px 0 0; }
+  /* the map fills the whole screen; the sidebar floats over its lower portion as a
+     bottom sheet that steps through three heights (collapsed / half / full) */
+  #cesiumWrap { position: fixed; inset: 0; height: 100dvh; }
+  #sidebar { position: fixed; left: 0; right: 0; bottom: 0; width: 100%; height: 50dvh;
+    z-index: 5; flex: none; min-height: 0; border-top: 1px solid #e2e8ee;
+    border-radius: 14px 14px 0 0; box-shadow: 0 -4px 16px rgba(27,39,51,.16); }
+  #app.sheet-full #sidebar { height: 100dvh; border-radius: 0; }
+  #app.sheet-collapsed #sidebar { display: none; }
   #list { overscroll-behavior: contain; }
   #controls { padding: 9px 14px; }
-  /* the collapse control becomes a horizontal tab riding the top edge of the
-     bottom sheet; collapsing hides the sheet and lets the map fill the screen */
+  /* the collapse control is a horizontal tab riding the top edge of the sheet; it
+     tracks the sheet height so it stays glued to that edge at every level */
   .sidebar-toggle { top: auto; left: 50%; bottom: 50dvh; transform: translateX(-50%);
     width: 48px; height: 18px; border: 1px solid #e2e8ee; border-bottom: none;
-    border-radius: 8px 8px 0 0; box-shadow: 0 -2px 6px rgba(27,39,51,.08); }
-  .sidebar-toggle .chev { display: block; transform: rotate(-90deg); }
-  #app.sidebar-collapsed #cesiumWrap { height: 100dvh; }
-  #app.sidebar-collapsed .sidebar-toggle { left: 50%; bottom: 0; transform: translateX(-50%); }
+    border-radius: 8px 8px 0 0; box-shadow: 0 -2px 6px rgba(27,39,51,.08); z-index: 8; }
+  #app.sheet-full .sidebar-toggle { bottom: calc(100dvh - 18px); }
+  #app.sheet-collapsed .sidebar-toggle { bottom: 0; }
+  /* chevron lies flat; points up to expand, flips down when the next tap contracts */
+  .sidebar-toggle .chev { display: block; transform: rotate(90deg); }
+  .sidebar-toggle .chev.down { transform: rotate(-90deg); }
 }

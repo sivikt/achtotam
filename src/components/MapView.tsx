@@ -3,6 +3,7 @@ import * as Cesium from "cesium";
 import type { Segment, Trail } from "../data/types";
 import { lineStringsFromWKT } from "../lib/wkt";
 import { colorFor } from "../lib/lang";
+import { BASEMAPS, ESRI, OVERLAYS } from "../lib/basemaps";
 
 export interface MapHandle {
   showTrack: (i: number, fly: boolean) => void;
@@ -17,9 +18,8 @@ export interface CameraState { lng: number; lat: number; height: number; heading
 interface Props {
   trails: Trail[];
   shownSlugs: Set<string>;
-  showRefs: boolean;
-  showSat: boolean;
-  showTopo: boolean;
+  basemap: string;
+  overlays: Set<string>;
   initialCam: CameraState | null;
   onPick: (slug: string) => void;
   onActiveChange: (slug: string | null) => void;
@@ -27,8 +27,10 @@ interface Props {
   onCameraChange: (cam: CameraState) => void;
 }
 
-const ESRI = "https://services.arcgisonline.com/ArcGIS/rest/services/";
 const LITHUANIA = () => Cesium.Rectangle.fromDegrees(20.9, 53.9, 26.9, 56.5);
+
+const BASEMAP_BY_KEY = new Map(BASEMAPS.map((b) => [b.key, b] as const));
+const OVERLAY_BY_KEY = new Map(OVERLAYS.map((o) => [o.key, o] as const));
 
 // Material Symbols "location_on" pin — same sign the detail panel uses for the
 // start/finish addresses. Rendered to an SVG data URI so Cesium can show it as a
@@ -49,13 +51,14 @@ function boundsOfLines(lines: number[][]) {
 }
 
 const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
-  const { trails, shownSlugs, showRefs, showSat, showTopo, initialCam, onPick, onActiveChange, onViewChange, onCameraChange } = props;
+  const { trails, shownSlugs, basemap, overlays, initialCam, onPick, onActiveChange, onViewChange, onCameraChange } = props;
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
-  const labelsRef = useRef<Cesium.ImageryLayer | null>(null);
-  const roadsRef = useRef<Cesium.ImageryLayer | null>(null);
-  const satRef = useRef<Cesium.ImageryLayer | null>(null);
-  const topoRef = useRef<Cesium.ImageryLayer | null>(null);
+  // created Cesium layers, cached by registry key so re-selecting doesn't rebuild.
+  // a basemap can be a stack (bottom→top), e.g. world imagery under a regional ortho
+  const basemapLayers = useRef<Map<string, Cesium.ImageryLayer[]>>(new Map());
+  const overlayLayers = useRef<Map<string, Cesium.ImageryLayer>>(new Map());
+  const basemapKey = useRef<string>(basemap);
   const entities = useRef<Record<string, Ent | Ent[]>>({});
   const segEntities = useRef<Ent[]>([]);
   const endpointEntities = useRef<Ent[]>([]);
@@ -73,48 +76,54 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
   useEffect(() => {
     Cesium.Ion.defaultAccessToken = undefined as unknown as string;
     const viewer = new Cesium.Viewer(containerRef.current!, {
-      // OpenStreetMap (same tiles as openstreetmap.org) is the default base map
-      baseLayer: new Cesium.ImageryLayer(new Cesium.UrlTemplateImageryProvider({
-        url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-        credit: "© OpenStreetMap contributors", maximumLevel: 19,
-      })),
+      // basemaps are added explicitly below from the registry (single-select)
+      baseLayer: false,
       sceneMode: Cesium.SceneMode.SCENE3D,
       baseLayerPicker: false, geocoder: false, homeButton: false, sceneModePicker: false,
       navigationHelpButton: false, animation: false, timeline: false, fullscreenButton: true,
       selectionIndicator: false, infoBox: false,
+      // render only when the scene actually changes (camera move, entity edit) instead
+      // of a constant 60fps loop — the biggest battery/CPU win on phones. Nothing here
+      // animates over time, so elapsed time alone should never force a redraw.
+      requestRenderMode: true, maximumRenderTimeChange: Infinity,
     });
     viewer.scene.globe.enableLighting = false;
+    // raster tiles and labels look blurry on retina/mobile because Cesium renders at
+    // CSS resolution by default; render at the device pixel ratio so they stay crisp.
+    viewer.useBrowserRecommendedResolution = false;
+    // imagery sharpness is set by the globe's screen-space error: it decides which
+    // tile LOD gets draped, so a lower value pulls in higher-resolution tiles and
+    // kills the blur when zoomed in (matching ArcGIS-grade crispness off the same
+    // Esri imagery). Phones keep the looser default to protect the perf budget.
+    viewer.scene.globe.maximumScreenSpaceError =
+      window.matchMedia("(max-width: 768px)").matches ? 2 : 1;
+    // a flat OSM map needs none of the 3D-globe atmosphere/sky/lighting effects —
+    // turning them off cuts per-frame GPU work on low-end devices.
+    viewer.scene.fog.enabled = false;
+    if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false;
+    viewer.scene.globe.showGroundAtmosphere = false;
+    if (viewer.scene.sun) viewer.scene.sun.show = false;
+    if (viewer.scene.moon) viewer.scene.moon.show = false;
+    if (viewer.scene.skyBox) viewer.scene.skyBox.show = false;
+    viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#aab8c2");
     viewerRef.current = viewer;
 
-    // satellite imagery sits above the OSM base and is toggled on demand
-    const sat = Cesium.ImageryLayer.fromProviderAsync(
-      Cesium.ArcGisMapServerImageryProvider.fromUrl(ESRI + "World_Imagery/MapServer"), {});
-    // OpenTopoMap: topographic basemap with contour lines + elevation labels
-    const topo = new Cesium.ImageryLayer(new Cesium.UrlTemplateImageryProvider({
-      url: "https://tile.opentopomap.org/{z}/{x}/{y}.png",
-      credit: "© OpenTopoMap (CC-BY-SA)", maximumLevel: 17,
-    }));
-    // transparent reference overlay: roads/transport (streets) + country/place labels,
-    // drawn on top so it reads over satellite (the OSM base already carries these itself)
-    const roads = Cesium.ImageryLayer.fromProviderAsync(
-      Cesium.ArcGisMapServerImageryProvider.fromUrl(ESRI + "Reference/World_Transportation/MapServer"), {});
-    const labels = Cesium.ImageryLayer.fromProviderAsync(
-      Cesium.ArcGisMapServerImageryProvider.fromUrl(ESRI + "Reference/World_Boundaries_and_Places/MapServer"), {});
-    viewer.imageryLayers.add(sat);
-    viewer.imageryLayers.add(topo);
-    viewer.imageryLayers.add(roads);
-    viewer.imageryLayers.add(labels);
-    sat.show = showSat;
-    topo.show = showTopo;
-    roads.show = showRefs;
-    labels.show = showRefs;
-    satRef.current = sat;
-    topoRef.current = topo;
-    roadsRef.current = roads;
-    labelsRef.current = labels;
+    // the chosen basemap sits at the bottom; reference overlays stack above it
+    // (trail entities are not imagery layers and always draw on top of everything)
+    getBasemapLayers(basemap).forEach((l) => viewer.imageryLayers.add(l));
+    basemapKey.current = basemap;
+    for (const key of overlays) {
+      const ov = getOverlayLayer(key);
+      if (ov) viewer.imageryLayers.add(ov);
+    }
 
     const picker = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
     const slugAt = (pos: Cesium.Cartesian2) => {
+      // ring samples can land outside the canvas; picking an off-screen point
+      // makes Cesium build an invalid ray and throw ("normalized result is not
+      // a number"), so skip anything beyond the canvas bounds.
+      const canvas = viewer.scene.canvas;
+      if (pos.x < 0 || pos.y < 0 || pos.x > canvas.clientWidth || pos.y > canvas.clientHeight) return null;
       const picked = viewer.scene.pick(pos);
       return Cesium.defined(picked) && picked.id ? (picked.id as Ent).trailSlug ?? null : null;
     };
@@ -189,17 +198,83 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
       viewer.camera.moveEnd.removeEventListener(emitView);
       viewer.camera.moveEnd.removeEventListener(emitCam);
       picker.destroy(); viewer.destroy();
+      // drop the ref so post-unmount imperative calls (e.g. clearSegHighlight from
+      // DetailPanel's cleanup) don't touch the destroyed viewer's scene
+      if (viewerRef.current === viewer) viewerRef.current = null;
     };
   }, []);
 
+  // swap the basemap: add the new stack at the bottom (preserving its bottom→top
+  // order), then remove the previous stack's layers
   useEffect(() => {
-    if (labelsRef.current) labelsRef.current.show = showRefs;
-    if (roadsRef.current) roadsRef.current.show = showRefs;
-  }, [showRefs]);
-  useEffect(() => { if (satRef.current) satRef.current.show = showSat; }, [showSat]);
-  useEffect(() => { if (topoRef.current) topoRef.current.show = showTopo; }, [showTopo]);
+    const viewer = viewerRef.current;
+    if (!viewer || basemap === basemapKey.current) return;
+    const prev = basemapLayers.current.get(basemapKey.current) ?? [];
+    const next = getBasemapLayers(basemap);
+    // lowerToBottom in reverse so the first (bottom) layer ends up lowest
+    [...next].reverse().forEach((l) => {
+      if (!viewer.imageryLayers.contains(l)) viewer.imageryLayers.add(l);
+      viewer.imageryLayers.lowerToBottom(l);
+    });
+    prev.forEach((l) => { if (!next.includes(l)) viewer.imageryLayers.remove(l, false); });
+    basemapKey.current = basemap;
+    requestRender();
+  }, [basemap]);
+
+  // reconcile reference overlays against the active set (add missing, remove extra)
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    for (const [key, layer] of overlayLayers.current) {
+      if (!overlays.has(key) && viewer.imageryLayers.contains(layer))
+        viewer.imageryLayers.remove(layer, false);
+    }
+    for (const key of overlays) {
+      const ov = getOverlayLayer(key);
+      if (ov && !viewer.imageryLayers.contains(ov)) viewer.imageryLayers.add(ov);
+    }
+    requestRender();
+  }, [overlays]);
+
   // hide trails that don't match the current content filters (search/theme/type/attrs)
   useEffect(() => { applyVisibility(); }, [shownSlugs]);
+
+  // requestRenderMode draws only on demand, so any programmatic scene change
+  // (entity edits, layer toggles) must explicitly ask for a redraw.
+  function requestRender() {
+    const v = viewerRef.current;
+    if (v && !v.isDestroyed()) v.scene.requestRender();
+  }
+
+  // build (and cache) the Cesium layer stack (bottom→top) for a registry basemap key
+  function getBasemapLayers(key: string) {
+    const cached = basemapLayers.current.get(key);
+    if (cached) return cached;
+    const b = BASEMAP_BY_KEY.get(key);
+    if (!b) return [];
+    const layers: Cesium.ImageryLayer[] = [];
+    if (b.under)
+      layers.push(Cesium.ImageryLayer.fromProviderAsync(
+        Cesium.ArcGisMapServerImageryProvider.fromUrl(ESRI + b.under + "/MapServer"), {}));
+    layers.push(b.kind === "esri"
+      ? Cesium.ImageryLayer.fromProviderAsync(
+          Cesium.ArcGisMapServerImageryProvider.fromUrl(ESRI + b.service + "/MapServer"), {})
+      : new Cesium.ImageryLayer(new Cesium.UrlTemplateImageryProvider({
+          url: b.url!, credit: b.credit, maximumLevel: b.maxLevel })));
+    basemapLayers.current.set(key, layers);
+    return layers;
+  }
+
+  function getOverlayLayer(key: string) {
+    const cached = overlayLayers.current.get(key);
+    if (cached) return cached;
+    const o = OVERLAY_BY_KEY.get(key);
+    if (!o) return null;
+    const layer = Cesium.ImageryLayer.fromProviderAsync(
+      Cesium.ArcGisMapServerImageryProvider.fromUrl(ESRI + o.service + "/MapServer"), {});
+    overlayLayers.current.set(key, layer);
+    return layer;
+  }
 
   function applyVisibility() {
     for (const slug in entities.current) {
@@ -207,6 +282,7 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
       const arr = Array.isArray(entities.current[slug]) ? (entities.current[slug] as Ent[]) : [entities.current[slug] as Ent];
       for (const e of arr) e.show = show;
     }
+    requestRender();
   }
 
   function applyHighlight() {
@@ -225,6 +301,7 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
         }
       }
     }
+    requestRender();
   }
 
   function ensureEntity(i: number) {
@@ -253,12 +330,14 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
     const viewer = viewerRef.current;
     if (viewer) segEntities.current.forEach((e) => viewer.entities.remove(e));
     segEntities.current = [];
+    requestRender();
   }
 
   function clearEndpoints() {
     const viewer = viewerRef.current;
     if (viewer) endpointEntities.current.forEach((e) => viewer.entities.remove(e));
     endpointEntities.current = [];
+    requestRender();
   }
 
   // green = start, red = finish; shown only for the active trail. clicking a
@@ -281,6 +360,7 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
     };
     if (t.start) add(t.start, "#2ecc71");
     if (t.finish) add(t.finish, "#e74c3c");
+    requestRender();
   }
 
   useImperativeHandle(ref, (): MapHandle => ({
