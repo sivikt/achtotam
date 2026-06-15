@@ -206,10 +206,6 @@ button.act.ico svg { width: 17px; height: 17px; display: block; }
 .gclose:hover { opacity: 1; }
 .gstage { position: relative; display: flex; align-items: center; justify-content: center; max-width: 92%; max-height: calc(100% - 130px); }
 .gbig { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; box-shadow: 0 8px 40px rgba(0,0,0,.6); }
-.gnav { position: absolute; top: 50%; transform: translateY(-50%); width: 46px; height: 46px; border-radius: 50%; border: none; background: rgba(20,32,43,.7); color: #fff; font-size: 30px; line-height: 1; cursor: pointer; }
-.gnav:hover { background: rgba(58,110,165,.9); }
-.gprev { left: 8px; }
-.gnext { right: 8px; }
 .gstrip { display: flex; gap: 6px; margin-top: 16px; max-width: 92%; overflow-x: auto; padding: 4px; }
 .gthumb { height: 56px; width: 80px; object-fit: cover; border-radius: 4px; cursor: pointer; opacity: .5; border: 2px solid transparent; flex: none; }
 .gthumb.on, .gthumb:hover { opacity: 1; border-color: #6fb6ff; }
