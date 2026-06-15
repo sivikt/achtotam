@@ -493,12 +493,12 @@ export default function App() {
             </div>
           )}
         </div>
-        {gallery && (
-          <Gallery items={gallery.items} index={gallery.index}
-            onIndex={(i) => setGallery((g) => (g ? { ...g, index: i } : g))}
-            onClose={() => setGallery(null)} />
-        )}
       </div>
+      {gallery && (
+        <Gallery items={gallery.items} index={gallery.index}
+          onIndex={(i) => setGallery((g) => (g ? { ...g, index: i } : g))}
+          onClose={() => setGallery(null)} />
+      )}
     </div>
   );
 }
