@@ -20,10 +20,14 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 /* language picker rides the top-right toolbar, immediately left of the fullscreen
    button: a standard language icon dropping down the three languages, each named
    in its own language. (Fullscreen is 34px wide at right:12, so sit at right:52.) */
-#langCtl { position: absolute; top: 12px; right: 52px; z-index: 6; display: flex; }
-.langmenu { position: absolute; top: 40px; right: 0; z-index: 10; display: flex; flex-direction: column;
+/* mirror #layersCtl on the left: a vertical button stack with popups opening to
+   the side. right:52px clears Cesium's top-right fullscreen button. */
+#langCtl { position: absolute; top: 12px; right: 52px; z-index: 6; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.langmenu { position: absolute; right: 44px; z-index: 10; display: flex; flex-direction: column;
   gap: 2px; padding: 4px; min-width: 124px; background: #ffffff; border: 1px solid #d3dae2;
   border-radius: 8px; box-shadow: 0 6px 20px rgba(27,39,51,.18); }
+.langmenu.m-eng { top: 0; }
+.langmenu.m-lng { top: 40px; }
 .langmenu button { display: block; width: 100%; text-align: left; padding: 7px 9px; border: none;
   border-radius: 6px; background: none; color: #1b2733; font-size: 12px; cursor: pointer; }
 .langmenu button:hover { background: #eef3f8; }
@@ -110,7 +114,11 @@ button.act.ico svg { width: 17px; height: 17px; display: block; }
 .sortdir svg { width: 14px; height: 14px; display: block; transition: transform .15s; }
 .sortdir.up svg { transform: scaleY(-1); }
 #cesiumWrap { flex: 1; position: relative; }
-#cesiumContainer { width: 100%; height: 100%; }
+#cesiumContainer, .map2d { width: 100%; height: 100%; }
+/* a low-z stacking context so Leaflet/MapLibre's high internal pane z-indexes
+   stay contained beneath the floating map controls (z-index 6) */
+.map2d { position: relative; z-index: 0; }
+.lpin { background: none; border: none; }
 /* move the fullscreen button up into the top-right toolbar slot vacated by the
    removed projection (scene-mode) picker, instead of its default bottom corner */
 /* match the layers buttons: rounded, translucent, frosted */

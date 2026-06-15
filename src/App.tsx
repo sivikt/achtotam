@@ -2,7 +2,10 @@ import { type CSSProperties, type PointerEvent as RPointerEvent, useEffect, useM
 import type { Lang, Segment, Trail } from "./data/types";
 import { trails as allTrails, routeTypeLabels } from "./generated/trails";
 import { I18N } from "./data/i18n";
-import MapView, { type CameraState, type MapHandle } from "./components/MapView";
+import CesiumMap from "./components/CesiumMap";
+import LeafletMap from "./components/LeafletMap";
+import MapLibreMap from "./components/MapLibreMap";
+import type { CameraState, MapHandle } from "./components/mapTypes";
 import Sidebar, { type SortMode } from "./components/Sidebar";
 import Gallery, { type GalleryItem } from "./components/Gallery";
 import { nameOf, pick, qtyNum, slugify } from "./lib/lang";
@@ -36,6 +39,15 @@ const routeSlug = (slug: string, lang: Lang) => {
 
 export interface ViewRect { w: number; s: number; e: number; n: number }
 
+// three interchangeable map engines, chosen via ?engine= for side-by-side perf
+// comparison. Cesium is the 3D globe (default); Leaflet + MapLibre are 2D.
+type Engine = "cesium" | "leaflet" | "maplibre";
+const ENGINES: { key: Engine; label: string }[] = [
+  { key: "cesium", label: "Cesium 3D" },
+  { key: "leaflet", label: "Leaflet" },
+  { key: "maplibre", label: "MapLibre" },
+];
+
 // one representative [lng,lat] per trail, precomputed for fast in-view testing
 function repPoint(t: Trail): [number, number] | null {
   if (isFinite(t.lat) && isFinite(t.lng)) return [t.lng, t.lat];
@@ -61,6 +73,13 @@ const LayersIcon = () => (
 const BasemapIcon = () => (
   <svg viewBox="0 0 24 24" fill="currentColor">
     <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
+  </svg>
+);
+// Material Symbols "memory" — a processor chip, standing in for the swappable
+// map *rendering engine* (Cesium / Leaflet / MapLibre)
+const EngineIcon = () => (
+  <svg viewBox="0 0 24 24" fill="currentColor">
+    <path d="M15 9H9v6h6V9zm-2 4h-2v-2h2v2zm8-2V9h-2V7c0-1.1-.9-2-2-2h-2V3h-2v2h-2V3H9v2H7c-1.1 0-2 .9-2 2v2H3v2h2v2H3v2h2v2c0 1.1.9 2 2 2h2v2h2v-2h2v2h2v-2h2c1.1 0 2-.9 2-2v-2h2v-2h-2v-2h2zm-4 6H7V7h10v10z" />
   </svg>
 );
 // Material Symbols "language" — globe with meridians, the standard locale glyph
@@ -126,6 +145,11 @@ export default function App() {
   const [basemapOpen, setBasemapOpen] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
+  const [engineOpen, setEngineOpen] = useState(false);
+  const [engine, setEngine] = useState<Engine>(() => {
+    const e = PARAMS.get("engine");
+    return e === "leaflet" || e === "cesium" ? e : "maplibre";
+  });
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(340);
   // mobile bottom-sheet level: 0 collapsed, 1 half, 2 full. dir ping-pongs through
@@ -235,9 +259,10 @@ export default function App() {
     if (activeSlug) p.set("route", routeSlug(activeSlug, lang));
     if (basemap !== DEFAULT_BASEMAP) p.set("base", basemap);
     if (overlays.size) p.set("layers", [...overlays].join(","));
+    if (engine !== "maplibre") p.set("engine", engine);
     if (camRef.current) p.set("cam", camRef.current);
     pushUrl(p);
-  }, [lang, search, sortMode, sortDir, themeFilter, catFilter, attrFilter, activeSlug, basemap, overlays]);
+  }, [lang, search, sortMode, sortDir, themeFilter, catFilter, attrFilter, activeSlug, basemap, overlays, engine]);
 
   const onCameraChange = (cam: CameraState) => {
     camRef.current = `${cam.lng.toFixed(5)},${cam.lat.toFixed(5)},${Math.round(cam.height)},`
@@ -255,6 +280,16 @@ export default function App() {
     if (i != null) map.current?.showTrack(i, !initialCam);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // switching engines remounts the map fresh; re-frame the active trail (if any)
+  // on the new viewer so the comparison starts from the same view. Skip the very
+  // first run — the on-mount effect above already handled the initial route.
+  const firstEngine = useRef(true);
+  useEffect(() => {
+    if (firstEngine.current) { firstEngine.current = false; return; }
+    if (detail) { const i = indexBySlug.get(detail.slug); if (i != null) map.current?.showTrack(i, true); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engine]);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 768px)");
@@ -293,6 +328,15 @@ export default function App() {
 
   const d = I18N[lang];
 
+  // shared across all three engines (same MapHandle/MapProps contract); a distinct
+  // key per engine forces a full remount on switch so no stale viewer lingers.
+  const mapProps = {
+    ref: map, trails: allTrails, shownSlugs, basemap, overlays, initialCam,
+    onCameraChange,
+    onPick: (slug: string) => { const t = allTrails.find((x) => x.slug === slug); if (t) selectTrail(t, false); },
+    onActiveChange: setActiveSlug, onViewChange: setViewRect,
+  };
+
   return (
     <div id="app" className={appCls} style={{ "--sidebar-w": `${sidebarWidth}px` } as CSSProperties}>
       <Sidebar
@@ -321,10 +365,9 @@ export default function App() {
       </button>
       {!isMobile && <div className="sidebar-resizer" onPointerDown={startResize} />}
       <div id="cesiumWrap">
-        <MapView ref={map} trails={allTrails} shownSlugs={shownSlugs} basemap={basemap} overlays={overlays}
-          initialCam={initialCam} onCameraChange={onCameraChange}
-          onPick={(slug) => { const t = allTrails.find((x) => x.slug === slug); if (t) selectTrail(t, false); }}
-          onActiveChange={setActiveSlug} onViewChange={setViewRect} />
+        {engine === "cesium" && <CesiumMap key="cesium" {...mapProps} />}
+        {engine === "leaflet" && <LeafletMap key="leaflet" {...mapProps} />}
+        {engine === "maplibre" && <MapLibreMap key="maplibre" {...mapProps} />}
         <div id="layersCtl">
           <button className={"layers-btn" + (basemapOpen ? " on" : "")} title={d.basemapTitle}
             aria-label={d.basemapTitle} aria-pressed={basemapOpen}
@@ -360,12 +403,26 @@ export default function App() {
           )}
         </div>
         <div id="langCtl">
+          <button className={"layers-btn" + (engineOpen ? " on" : "")} title={d.engineTitle}
+            aria-label={d.engineTitle} aria-pressed={engineOpen}
+            onClick={() => { setEngineOpen((o) => !o); setLangOpen(false); }}>
+            <EngineIcon />
+          </button>
+          {engineOpen && (
+            <div className="langmenu m-eng">
+              {ENGINES.map((e) => (
+                <button key={e.key} className={e.key === engine ? "on" : ""}
+                  onClick={() => { setEngine(e.key); setEngineOpen(false); }}>{e.label}</button>
+              ))}
+            </div>
+          )}
           <button className={"layers-btn" + (langOpen ? " on" : "")} title={d.language}
-            aria-label={d.language} aria-pressed={langOpen} onClick={() => setLangOpen((o) => !o)}>
+            aria-label={d.language} aria-pressed={langOpen}
+            onClick={() => { setLangOpen((o) => !o); setEngineOpen(false); }}>
             <LanguageIcon />
           </button>
           {langOpen && (
-            <div className="langmenu">
+            <div className="langmenu m-lng">
               {([["lt", "Lietuvių"], ["en", "English"], ["ru", "Русский"]] as [Lang, string][]).map(([code, name]) => (
                 <button key={code} className={code === lang ? "on" : ""}
                   onClick={() => { setLang(code); setLangOpen(false); }}>{name}</button>

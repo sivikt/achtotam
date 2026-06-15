@@ -1,5 +1,5 @@
 // Keyless basemap + overlay registry, shared by App (gallery thumbnails/labels)
-// and MapView (Cesium layer construction). The project has no ArcGIS API key, so
+// and CesiumMap (Cesium layer construction). The project has no ArcGIS API key, so
 // only no-key sources are listed: Esri public raster MapServers, OSM, OpenTopoMap.
 
 export const ESRI = "https://services.arcgisonline.com/ArcGIS/rest/services/";
@@ -82,3 +82,38 @@ export const OVERLAYS: Overlay[] = [
 export const DEFAULT_BASEMAP = "osm";
 export const basemapKeys = new Set(BASEMAPS.map((b) => b.key));
 export const overlayKeys = new Set(OVERLAYS.map((o) => o.key));
+
+const BASEMAP_BY_KEY = new Map(BASEMAPS.map((b) => [b.key, b] as const));
+const OVERLAY_BY_KEY = new Map(OVERLAYS.map((o) => [o.key, o] as const));
+
+// a raster tile template + metadata, the lowest common denominator the
+// non-Cesium (Leaflet / MapLibre) engines consume. Both engines substitute
+// {x}=col {y}=row {z}=zoom, which already matches the Esri /tile/{z}/{y}/{x}
+// path order, so every template is used verbatim.
+export interface TileSource {
+  url: string;
+  maxZoom: number;
+  credit?: string;
+}
+
+// Esri raster MapServer → a {z}/{y}/{x} tile template
+export const esriTileUrl = (service: string) =>
+  `${ESRI}${service}/MapServer/tile/{z}/{y}/{x}`;
+
+// the basemap's tile stack (bottom→top); mirrors CesiumMap's layer stack so a
+// regional source (maps.lt ortho) shows global Esri imagery underneath.
+export function basemapSources(key: string): TileSource[] {
+  const b = BASEMAP_BY_KEY.get(key);
+  if (!b) return [];
+  const out: TileSource[] = [];
+  if (b.under) out.push({ url: esriTileUrl(b.under), maxZoom: 19 });
+  out.push(b.kind === "esri"
+    ? { url: esriTileUrl(b.service!), maxZoom: 19 }
+    : { url: b.url!, maxZoom: b.maxLevel ?? 19, credit: b.credit });
+  return out;
+}
+
+export function overlaySource(key: string): TileSource | null {
+  const o = OVERLAY_BY_KEY.get(key);
+  return o ? { url: esriTileUrl(o.service), maxZoom: 19 } : null;
+}
