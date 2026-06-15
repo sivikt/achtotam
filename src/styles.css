@@ -224,9 +224,13 @@ button.act.ico svg { width: 17px; height: 17px; display: block; }
      bottom sheet that steps through three heights (collapsed / half / full) */
   #cesiumWrap { position: fixed; inset: 0; height: 100dvh; }
   #sidebar { position: fixed; left: 0; right: 0; bottom: 0; width: 100%; height: 50dvh;
-    z-index: 5; flex: none; min-height: 0; border-top: 1px solid #e2e8ee;
+    box-sizing: border-box; z-index: 5; flex: none; min-height: 0; border-top: 1px solid #e2e8ee;
     border-radius: 14px 14px 0 0; box-shadow: 0 -4px 16px rgba(27,39,51,.16); }
-  #app.sheet-full #sidebar { height: 100dvh; border-radius: 0; }
+  /* at full height the sheet fills the screen, so the floating controls would sit
+     on top of the panel title; pad the content down to clear the control bar */
+  #app.sheet-full #sidebar { height: 100dvh; border-radius: 0; padding-top: 26px; }
+  /* the detail panel is a flat rectangle — no rounded top corners */
+  #sidebar.detail-open { border-radius: 0; }
   #app.sheet-collapsed #sidebar { display: none; }
   #list { overscroll-behavior: contain; }
   #controls { padding: 9px 14px; }
@@ -237,6 +241,10 @@ button.act.ico svg { width: 17px; height: 17px; display: block; }
     padding: 3px 9px; border: 1px solid #e2e8ee; border-bottom: none;
     border-radius: 9px 9px 0 0; background: #ffffff;
     box-shadow: 0 -2px 6px rgba(27,39,51,.08); z-index: 8; }
-  #app.sheet-full .sheet-ctl { bottom: calc(100dvh - 22px); }
+  /* full height: the controls become a flush top header strip spanning the width,
+     sitting in the sheet's padding-top band so they never cover the title */
+  #app.sheet-full .sheet-ctl { top: 0; bottom: auto; left: 0; right: 0; width: 100%;
+    transform: none; padding: 4px 0; border: none; border-bottom: 1px solid #e2e8ee;
+    border-radius: 0; }
   #app.sheet-collapsed .sheet-ctl { bottom: 0; }
 }
