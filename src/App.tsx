@@ -82,6 +82,39 @@ const EngineIcon = () => (
     <path d="M15 9H9v6h6V9zm-2 4h-2v-2h2v2zm8-2V9h-2V7c0-1.1-.9-2-2-2h-2V3h-2v2h-2V3H9v2H7c-1.1 0-2 .9-2 2v2H3v2h2v2H3v2h2v2c0 1.1.9 2 2 2h2v2h2v-2h2v2h2v-2h2c1.1 0 2-.9 2-2v-2h2v-2h-2v-2h2zm-4 6H7V7h10v10z" />
   </svg>
 );
+// thin maximize/minimize corners — toggles browser fullscreen on the map wrapper
+const FullscreenIcon = ({ on }: { on: boolean }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+    {on ? (
+      <>
+        <polyline points="4 10 10 10 10 4" /><polyline points="20 14 14 14 14 20" />
+        <line x1="10" y1="10" x2="3" y2="3" /><line x1="14" y1="14" x2="21" y2="21" />
+      </>
+    ) : (
+      <>
+        <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" />
+        <line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
+      </>
+    )}
+  </svg>
+);
+// bottom-sheet controls (mobile): cross collapses, minus halves, double-arrow
+// expands the sheet to full height — drawn as plain strokes on gray dots
+const CrossIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round">
+    <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
+  </svg>
+);
+const MinusIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round">
+    <line x1="6" y1="12" x2="18" y2="12" />
+  </svg>
+);
+const ExpandIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="8 14 12 18 16 14" /><polyline points="8 10 12 6 16 10" />
+  </svg>
+);
 // Material Symbols "language" — globe with meridians, the standard locale glyph
 const LanguageIcon = () => (
   <svg viewBox="0 0 24 24" fill="currentColor">
@@ -146,6 +179,7 @@ export default function App() {
   const [layersOpen, setLayersOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
   const [engineOpen, setEngineOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [engine, setEngine] = useState<Engine>(() => {
     const e = PARAMS.get("engine");
     return e === "leaflet" || e === "cesium" ? e : "maplibre";
@@ -298,6 +332,20 @@ export default function App() {
     return () => mq.removeEventListener("change", on);
   }, []);
 
+  // engine-agnostic fullscreen on the map wrapper (Cesium's built-in button is
+  // off, so this works the same across all three engines). Track the actual
+  // state via the event so the icon flips even on Esc/F11 exits.
+  useEffect(() => {
+    const on = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", on);
+    return () => document.removeEventListener("fullscreenchange", on);
+  }, []);
+  const toggleFullscreen = () => {
+    const el = document.getElementById("cesiumWrap");
+    if (!document.fullscreenElement) el?.requestFullscreen?.();
+    else document.exitFullscreen?.();
+  };
+
   // desktop: drag the sidebar/map seam to resize the panel (clamped 240–640px).
   // clientX is measured from the viewport's left edge, where the sidebar starts.
   const startResize = (e: RPointerEvent) => {
@@ -313,14 +361,8 @@ export default function App() {
     document.body.style.userSelect = "none";
   };
 
-  // mobile: step the sheet one level, reversing direction at each end so it always
-  // passes back through "half" before flipping (half→full→half→collapsed→half…)
-  const cycleSheet = () => setSheet(({ level, dir }) => {
-    let next = level + dir, d2 = dir;
-    if (next > 2) { next = 1; d2 = -1; }
-    else if (next < 0) { next = 1; d2 = 1; }
-    return { level: next, dir: d2 };
-  });
+  // mobile: jump the sheet straight to a level via the three sheet-control buttons
+  const setSheetLevel = (level: number) => setSheet({ level, dir: level >= 2 ? -1 : 1 });
 
   const appCls = isMobile
     ? (sheet.level === 0 ? "sheet-collapsed" : sheet.level === 2 ? "sheet-full" : "")
@@ -357,12 +399,27 @@ export default function App() {
         onOpenSegment={onOpenSegment}
         onOpenGallery={(items, index) => setGallery({ items, index })}
       />
-      <button className="sidebar-toggle" title={d.collapse} aria-label={d.collapse}
-        aria-pressed={isMobile ? sheet.level === 0 : !sidebarOpen}
-        onClick={() => (isMobile ? cycleSheet() : setSidebarOpen((o) => !o))}>
-        <span className={"chev" + (isMobile && sheet.dir === -1 ? " down" : "")}>
-          {isMobile ? "‹" : sidebarOpen ? "‹" : "›"}</span>
-      </button>
+      {isMobile ? (
+        <div className="sheet-ctl">
+          {sheet.level !== 0 && (
+            <button className="winbtn close" title={d.collapse} aria-label={d.collapse}
+              onClick={() => setSheetLevel(0)}><CrossIcon /></button>
+          )}
+          {sheet.level !== 1 && (
+            <button className="winbtn min" title={d.collapse} aria-label={d.collapse}
+              onClick={() => setSheetLevel(1)}><MinusIcon /></button>
+          )}
+          {sheet.level !== 2 && (
+            <button className="winbtn max" title={d.collapse} aria-label={d.collapse}
+              onClick={() => setSheetLevel(2)}><ExpandIcon /></button>
+          )}
+        </div>
+      ) : (
+        <button className="sidebar-toggle" title={d.collapse} aria-label={d.collapse}
+          aria-pressed={!sidebarOpen} onClick={() => setSidebarOpen((o) => !o)}>
+          <span className="chev">{sidebarOpen ? "‹" : "›"}</span>
+        </button>
+      )}
       {!isMobile && <div className="sidebar-resizer" onPointerDown={startResize} />}
       <div id="cesiumWrap">
         {engine === "cesium" && <CesiumMap key="cesium" {...mapProps} />}
@@ -371,13 +428,18 @@ export default function App() {
         <div id="layersCtl">
           <button className={"layers-btn" + (basemapOpen ? " on" : "")} title={d.basemapTitle}
             aria-label={d.basemapTitle} aria-pressed={basemapOpen}
-            onClick={() => { setBasemapOpen((o) => !o); setLayersOpen(false); }}>
+            onClick={() => { setBasemapOpen((o) => !o); setLayersOpen(false); setEngineOpen(false); }}>
             <BasemapIcon />
           </button>
           <button className={"layers-btn" + (layersOpen ? " on" : "")} title={d.layersTitle}
             aria-label={d.layersTitle} aria-pressed={layersOpen}
-            onClick={() => { setLayersOpen((o) => !o); setBasemapOpen(false); }}>
+            onClick={() => { setLayersOpen((o) => !o); setBasemapOpen(false); setEngineOpen(false); }}>
             <LayersIcon />
+          </button>
+          <button className={"layers-btn" + (engineOpen ? " on" : "")} title={d.engineTitle}
+            aria-label={d.engineTitle} aria-pressed={engineOpen}
+            onClick={() => { setEngineOpen((o) => !o); setBasemapOpen(false); setLayersOpen(false); }}>
+            <EngineIcon />
           </button>
           {basemapOpen && (
             <div className="basemap-gallery">
@@ -401,24 +463,25 @@ export default function App() {
               ))}
             </div>
           )}
-        </div>
-        <div id="langCtl">
-          <button className={"layers-btn" + (engineOpen ? " on" : "")} title={d.engineTitle}
-            aria-label={d.engineTitle} aria-pressed={engineOpen}
-            onClick={() => { setEngineOpen((o) => !o); setLangOpen(false); }}>
-            <EngineIcon />
-          </button>
           {engineOpen && (
-            <div className="langmenu m-eng">
+            <div className="layers-list engine-list">
               {ENGINES.map((e) => (
                 <button key={e.key} className={e.key === engine ? "on" : ""}
+                  aria-pressed={e.key === engine}
                   onClick={() => { setEngine(e.key); setEngineOpen(false); }}>{e.label}</button>
               ))}
             </div>
           )}
+        </div>
+        <div id="langCtl">
+          <button className="layers-btn" title={d.fullscreen}
+            aria-label={d.fullscreen} aria-pressed={isFullscreen}
+            onClick={() => { toggleFullscreen(); setLangOpen(false); }}>
+            <FullscreenIcon on={isFullscreen} />
+          </button>
           <button className={"layers-btn" + (langOpen ? " on" : "")} title={d.language}
             aria-label={d.language} aria-pressed={langOpen}
-            onClick={() => { setLangOpen((o) => !o); setEngineOpen(false); }}>
+            onClick={() => setLangOpen((o) => !o)}>
             <LanguageIcon />
           </button>
           {langOpen && (

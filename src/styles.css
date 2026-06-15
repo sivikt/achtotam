@@ -20,13 +20,13 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 /* language picker rides the top-right toolbar, immediately left of the fullscreen
    button: a standard language icon dropping down the three languages, each named
    in its own language. (Fullscreen is 34px wide at right:12, so sit at right:52.) */
-/* mirror #layersCtl on the left: a vertical button stack with popups opening to
-   the side. right:52px clears Cesium's top-right fullscreen button. */
-#langCtl { position: absolute; top: 12px; right: 52px; z-index: 6; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+/* mirror #layersCtl on the left: a vertical button stack at the same 12px inset
+   from the edge, with popups opening to the side. */
+#langCtl { position: absolute; top: 12px; right: 12px; z-index: 6; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .langmenu { position: absolute; right: 44px; z-index: 10; display: flex; flex-direction: column;
   gap: 2px; padding: 4px; min-width: 124px; background: #ffffff; border: 1px solid #d3dae2;
   border-radius: 8px; box-shadow: 0 6px 20px rgba(27,39,51,.18); }
-.langmenu.m-eng { top: 0; }
+/* language is the 2nd button in the right stack, so its menu drops to 40px */
 .langmenu.m-lng { top: 40px; }
 .langmenu button { display: block; width: 100%; text-align: left; padding: 7px 9px; border: none;
   border-radius: 6px; background: none; color: #1b2733; font-size: 12px; cursor: pointer; }
@@ -88,6 +88,8 @@ button.act.ico svg { width: 17px; height: 17px; display: block; }
   display: flex; flex-direction: column; gap: 2px; padding: 4px; min-width: 168px;
   background: rgba(20,28,38,.92); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.4);
   backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+/* engine is the 3rd button in the left stack, so its menu drops to 80px */
+.engine-list { top: 80px; }
 .layers-list button { display: block; width: 100%; text-align: left; padding: 7px 9px; border: none;
   border-radius: 6px; background: none; color: #c6d3de; font-size: 12px; cursor: pointer; }
 .layers-list button:hover { background: rgba(31,49,64,.7); color: #e6edf3; }
@@ -119,27 +121,21 @@ button.act.ico svg { width: 17px; height: 17px; display: block; }
    stay contained beneath the floating map controls (z-index 6) */
 .map2d { position: relative; z-index: 0; }
 .lpin { background: none; border: none; }
-/* move the fullscreen button up into the top-right toolbar slot vacated by the
-   removed projection (scene-mode) picker, instead of its default bottom corner */
-/* match the layers buttons: rounded, translucent, frosted */
-.cesium-viewer-fullscreenContainer { top: 12px; right: 12px; bottom: auto; left: auto; width: 34px; height: 34px; }
-.cesium-viewer-fullscreenContainer .cesium-button {
-  width: 34px; height: 34px; margin: 0; padding: 0;
-  border-radius: 6px; border: none;
-  background-color: rgba(20,28,38,.55);
-  box-shadow: none;
-  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
-  /* replace Cesium's thick default glyph with a thin, elegant maximize icon */
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c6d3de' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><polyline points='15 3 21 3 21 9'/><polyline points='9 21 3 21 3 15'/><line x1='21' y1='3' x2='14' y2='10'/><line x1='3' y1='21' x2='10' y2='14'/></svg>");
-  background-repeat: no-repeat; background-position: center; background-size: 17px;
-}
-/* hide Cesium's built-in SVG so only our background-image icon shows */
-.cesium-viewer-fullscreenContainer .cesium-button svg { display: none; }
 .cesium-viewer-fullscreenContainer .cesium-button:hover {
   background-color: rgba(31,49,64,.7);
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e6edf3' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><polyline points='15 3 21 3 21 9'/><polyline points='9 21 3 21 3 15'/><line x1='21' y1='3' x2='14' y2='10'/><line x1='3' y1='21' x2='10' y2='14'/></svg>");
 }
 #detail { flex: 1; min-height: 0; display: flex; flex-direction: column; background: #ffffff; color: #1b2733; }
+/* mobile bottom-sheet controls: gray round buttons riding the sheet's top edge,
+   in macOS window-button arrangement — cross collapses, minus halves, double
+   arrow expands to full. desktop hides this (see media query); .sheet-ctl is
+   positioned in the mobile block. */
+.sheet-ctl { display: none; }
+.winbtn { width: 13px; height: 13px; padding: 0; border: none; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #d3dae2; color: #4a5663; cursor: pointer; }
+.winbtn:hover { background: #c2cbd6; color: #1b2733; }
+.winbtn svg { width: 8px; height: 8px; display: block; }
 #detail .dhead { padding: 11px 14px; border-bottom: 1px solid #e2e8ee; display: flex; gap: 8px; align-items: center; }
 #detail .dhead > div { flex: 1; min-width: 0; }
 #detail .dhead h2 { font-size: 12.5px; font-weight: 600; margin: 0; line-height: 1.3; }
@@ -234,14 +230,13 @@ button.act.ico svg { width: 17px; height: 17px; display: block; }
   #app.sheet-collapsed #sidebar { display: none; }
   #list { overscroll-behavior: contain; }
   #controls { padding: 9px 14px; }
-  /* the collapse control is a horizontal tab riding the top edge of the sheet; it
-     tracks the sheet height so it stays glued to that edge at every level */
-  .sidebar-toggle { top: auto; left: 50%; bottom: 50dvh; transform: translateX(-50%);
-    width: 48px; height: 18px; border: 1px solid #e2e8ee; border-bottom: none;
-    border-radius: 8px 8px 0 0; box-shadow: 0 -2px 6px rgba(27,39,51,.08); z-index: 8; }
-  #app.sheet-full .sidebar-toggle { bottom: calc(100dvh - 18px); }
-  #app.sheet-collapsed .sidebar-toggle { bottom: 0; }
-  /* chevron lies flat; points up to expand, flips down when the next tap contracts */
-  .sidebar-toggle .chev { display: block; transform: rotate(90deg); }
-  .sidebar-toggle .chev.down { transform: rotate(-90deg); }
+  /* the three sheet controls ride the top edge of the sheet on a small frosted
+     bar, tracking the sheet height so they stay glued to that edge at every level */
+  .sheet-ctl { display: flex; gap: 7px; align-items: center; justify-content: center;
+    position: absolute; left: 50%; bottom: 50dvh; transform: translateX(-50%);
+    padding: 3px 9px; border: 1px solid #e2e8ee; border-bottom: none;
+    border-radius: 9px 9px 0 0; background: #ffffff;
+    box-shadow: 0 -2px 6px rgba(27,39,51,.08); z-index: 8; }
+  #app.sheet-full .sheet-ctl { bottom: calc(100dvh - 22px); }
+  #app.sheet-collapsed .sheet-ctl { bottom: 0; }
 }

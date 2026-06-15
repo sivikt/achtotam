@@ -59,7 +59,7 @@ const CesiumMap = forwardRef<MapHandle, MapProps>(function CesiumMap(props, ref)
       baseLayer: false,
       sceneMode: Cesium.SceneMode.SCENE3D,
       baseLayerPicker: false, geocoder: false, homeButton: false, sceneModePicker: false,
-      navigationHelpButton: false, animation: false, timeline: false, fullscreenButton: true,
+      navigationHelpButton: false, animation: false, timeline: false, fullscreenButton: false,
       selectionIndicator: false, infoBox: false,
       // render only when the scene actually changes (camera move, entity edit) instead
       // of a constant 60fps loop — the biggest battery/CPU win on phones. Nothing here
