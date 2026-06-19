@@ -3,7 +3,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { MapHandle, MapProps } from "./mapTypes";
 import type { Segment, Trail } from "../data/types";
-import { lineStringsFromWKT } from "../lib/wkt";
+import { lineStringsFromWKT, pointFromWKT } from "../lib/wkt";
 import { colorFor } from "../lib/lang";
 import { basemapSources, overlaySource } from "../lib/basemaps";
 
@@ -51,6 +51,7 @@ const MapLibreMap = forwardRef<MapHandle, MapProps>(function MapLibreMap(props, 
   const idsBySlug = useRef<Map<string, number[]>>(new Map());
   const boundsBySlug = useRef<Map<string, maplibregl.LngLatBounds>>(new Map());
   const markers = useRef<maplibregl.Marker[]>([]);
+  const segMarker = useRef<maplibregl.Marker | null>(null);
   const activeOverlays = useRef<Set<string>>(new Set());
   const activeSlug = useRef<string | null>(null);
   const hoverSlug = useRef<string | null>(null);
@@ -216,6 +217,8 @@ const MapLibreMap = forwardRef<MapHandle, MapProps>(function MapLibreMap(props, 
     const map = mapRef.current;
     const src = map?.getSource("seg") as maplibregl.GeoJSONSource | undefined;
     src?.setData(featureCollection([]));
+    segMarker.current?.remove();
+    segMarker.current = null;
   }
 
   useImperativeHandle(ref, (): MapHandle => ({
@@ -243,9 +246,19 @@ const MapLibreMap = forwardRef<MapHandle, MapProps>(function MapLibreMap(props, 
       mapRef.current!.fitBounds(LITHUANIA, { duration: 1000 });
     },
     highlightSegment(seg: Segment) {
-      const lines = seg.wkt ? lineStringsFromWKT(seg.wkt) : null;
-      if (!lines) return;
+      clearSegHighlight();
+      if (!seg.wkt) return;
       const map = mapRef.current!;
+      // a point-only part: drop a gold pin and zoom to it.
+      const pt = pointFromWKT(seg.wkt);
+      if (pt) {
+        segMarker.current = new maplibregl.Marker({ element: pinEl("#f5a623"), anchor: "bottom" })
+          .setLngLat([pt[0], pt[1]]).addTo(map);
+        map.flyTo({ center: [pt[0], pt[1]], zoom: Math.max(map.getZoom(), 14), duration: 1000 });
+        return;
+      }
+      const lines = lineStringsFromWKT(seg.wkt);
+      if (!lines) return;
       const feats: LineFeature[] = lines.map((flat) => ({
         type: "Feature", geometry: { type: "LineString", coordinates: lineCoords(flat) },
         properties: { slug: "", color: "#ffe14d" },

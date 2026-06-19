@@ -8,6 +8,7 @@ export interface Quantity {
 
 export interface Author {
   name: string;
+  website?: string;
   facebook?: string;
   instagram?: string;
 }

@@ -12,12 +12,14 @@ build/translations_cache.json), then writes two Turtle files:
 Translation uses the free Google endpoint (no API key). Swap `translate()`
 for a paid engine if you need higher quality.
 """
-import os, re, json, time, html, zipfile, unicodedata, urllib.request, urllib.parse
+import os, re, json, time, html, zipfile, unicodedata, urllib.request, urllib.parse, urllib.error
 
 ROOT  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC   = os.path.join(ROOT, "source_data")
 RAW   = os.path.join(SRC, "tracks_raw.json")
 TRACKS_DIR = os.path.join(SRC, "yurii_hiking_tracks")   # loose KML/KMZ track files
+BK_DIR = os.path.join(SRC, "baltukelias")               # scraped baltukelias.lt routes
+BK_IMG_BASE = "https://www.baltukelias.lt/data/tourism_objects/large/"
 CACHE = os.path.join(SRC, "translations_cache.json")
 UA    = {"User-Agent": "Mozilla/5.0"}
 LANGS = ["en", "ru"]
@@ -92,27 +94,45 @@ def _chunks(text, limit=1800):
     return parts
 
 
-_google_alive = True   # flipped off once Google serves a /sorry CAPTCHA block
+_google_blocked_until = 0.0   # epoch until which Google is skipped after a hard block
 _mymemory_fails = 0     # consecutive MyMemory failures; trips a circuit breaker
 _MYMEMORY_MAX_FAILS = 4
+_lingva_fails = 0       # consecutive Lingva failures; trips a circuit breaker
+_LINGVA_MAX_FAILS = 3
 
 
 def _g_translate(text, tl):
-    """Free Google endpoint. One shot — on any failure (incl. the /sorry block
-    that returns non-JSON HTML) mark Google dead so we stop wasting attempts."""
-    global _google_alive
+    """Free Google endpoint — the only reliably-up engine (Lingva mirrors are
+    frequently dead, MyMemory has a daily quota), so we lean on it hard. A 429
+    is just Google's short burst limit: back off and retry the SAME endpoint
+    rather than falling through to the slow/dead alternatives. To avoid tripping
+    that limit when translating a long burst (e.g. hundreds of points of
+    interest) we pace ~1 req/s. Only a genuine CAPTCHA block (HTTP 403, or the
+    /sorry HTML page that fails JSON decoding) parks Google for a 60 s cooldown,
+    so a single block doesn't doom the run."""
+    global _google_blocked_until
     data = urllib.parse.urlencode(
         {"client": "gtx", "sl": "lt", "tl": tl, "dt": "t", "q": text}).encode()
     url = "https://translate.googleapis.com/translate_a/single"
-    try:
-        req = urllib.request.Request(url, data=data, headers=UA)
-        res = json.loads(urllib.request.urlopen(req, timeout=30).read().decode("utf-8"))
-        out = "".join(seg[0] for seg in res[0] if seg and seg[0])
-        time.sleep(0.3)
-        return out
-    except Exception:
-        _google_alive = False
-        raise
+    for attempt in range(5):
+        try:
+            req = urllib.request.Request(url, data=data, headers=UA)
+            res = json.loads(urllib.request.urlopen(req, timeout=15).read().decode("utf-8"))
+            out = "".join(seg[0] for seg in res[0] if seg and seg[0])
+            time.sleep(0.7)
+            return out
+        except urllib.error.HTTPError as e:
+            if e.code == 429:                  # burst limit — wait it out and retry Google
+                time.sleep(2 * (attempt + 1))
+                continue
+            if e.code == 403:                  # hard CAPTCHA block — park Google briefly
+                _google_blocked_until = time.time() + 60
+            raise
+        except ValueError:                     # JSON decode failed → /sorry HTML block page
+            _google_blocked_until = time.time() + 60
+            raise
+    _google_blocked_until = time.time() + 60   # sustained 429s — back off Google a while
+    raise RuntimeError("google 429 burst limit")
 
 
 LINGVA_HOSTS = ["lingva.ml", "lingva.lunar.icu"]
@@ -124,24 +144,28 @@ def _lingva(text, tl):
     when this IP is CAPTCHA-blocked. GET, text URL-encoded in the path. Rotates
     hosts and backs off on the brief 429 burst-limit instead of giving up, so
     fields get translated rather than silently degraded to the source text."""
-    global _lingva_i
+    global _lingva_i, _lingva_fails
+    if _lingva_fails >= _LINGVA_MAX_FAILS:     # mirrors are down — stop wasting 10 s/attempt
+        raise RuntimeError("lingva circuit open")
     enc = urllib.parse.quote(text, safe="")
     last = None
-    for attempt in range(6):
+    for attempt in range(2):
         host = LINGVA_HOSTS[_lingva_i % len(LINGVA_HOSTS)]
         _lingva_i += 1
         try:
             url = f"https://{host}/api/v1/lt/{tl}/{enc}"
             res = json.loads(urllib.request.urlopen(
-                urllib.request.Request(url, headers=UA), timeout=30).read().decode("utf-8"))
+                urllib.request.Request(url, headers=UA), timeout=8).read().decode("utf-8"))
             out = res.get("translation", "")
             if out:
+                _lingva_fails = 0
                 time.sleep(0.4)
                 return out
             raise RuntimeError("empty translation")
         except Exception as e:
             last = e
-            time.sleep(1.5 * (attempt + 1))   # wait out 429 / transient errors
+            time.sleep(1.0 * (attempt + 1))   # wait out 429 / transient errors
+    _lingva_fails += 1
     raise RuntimeError(f"lingva failed: {last}")
 
 
@@ -179,7 +203,7 @@ def _mymemory(text, tl):
 
 
 def _translate_chunk(text, tl):
-    if _google_alive:
+    if time.time() >= _google_blocked_until:
         try:
             return _g_translate(text, tl)
         except Exception:
@@ -353,6 +377,144 @@ def load_track_files():
     return out
 
 
+# ---------------------------------------------------------------- baltukelias.lt
+# every Balts' Road route is tagged with this fixed subjective category (a proper
+# noun, so its label is curated rather than machine-translated)
+BK_CATEGORY = {"id": "baltu-kelias", "name_lt": "Baltų kelias",
+               "label": {"lt": "Baltų kelias", "en": "Balts’ Road", "ru": "Путь балтов"}}
+
+def _html_to_text(h):
+    """Flatten the CMS rich-text (descriptions ship as HTML) to the plain,
+    paragraph-separated prose the rest of the pipeline expects."""
+    if not h:
+        return ""
+    h = re.sub(r"(?i)<\s*br\s*/?>", "\n", h)
+    h = re.sub(r"(?i)</(p|li|h[1-6]|div)\s*>", "\n\n", h)
+    h = re.sub(r"<[^>]+>", "", h)
+    h = html.unescape(h).replace("\xa0", " ")
+    h = re.sub(r"[ \t]+", " ", h)
+    h = re.sub(r" *\n *", "\n", h)
+    return re.sub(r"\n{3,}", "\n\n", h).strip()
+
+
+def _fix_caps(s):
+    """The source presents route names in ALL CAPS; title-case them for display."""
+    s = (s or "").strip()
+    return s.title() if s and s.isupper() else s
+
+
+def _wkt_from_points(pts):
+    """LINESTRING from a baltukelias `filterpoints` list of [lat, lng] strings."""
+    coords = [(p[0], p[1]) for p in pts if len(p) >= 2]
+    if len(coords) < 2:
+        return None
+    return "LINESTRING(" + ", ".join(f"{lng} {lat}" for lat, lng in coords) + ")"
+
+
+def _bk_slug(route):
+    url = (route.get("view_url") or "").rstrip("/")
+    seg = url.rsplit("/", 1)[-1] if url else ""
+    return "bk-" + (seg or ("route-" + str(route.get("id"))))
+
+
+def _bk_parts(route, en):
+    """Each route's segments carry an `objects` list — the curated "points to
+    see" (piliakalniai, sacred sites, museums…), each with its own LT name,
+    HTML description, coordinates and a representative photo. Flatten them into
+    ordered trail parts, de-duplicating by object_id within the route (the same
+    site can recur across track segments). The point's single `pic` lives under
+    the same `large/` image base as the route photos. `en` maps object_id →
+    native English {name, description} harvested from the EN catalogue page; we
+    seed the translation cache with it so EN is the site's own wording and only
+    RU is machine-translated."""
+    parts, seen = [], set()
+    for seg in route.get("segments") or []:
+        for o in seg.get("objects") or []:
+            oid = o.get("object_id") or o.get("id")
+            if not oid or oid in seen:
+                continue
+            seen.add(oid)
+            name_lt = _fix_caps((o.get("name") or "").strip())
+            if not name_lt:
+                continue
+            desc_lt = _html_to_text(o.get("description") or "")
+            e = en.get(str(oid)) or {}
+            name_en = _fix_caps((e.get("name") or "").strip())
+            desc_en = _html_to_text(e.get("description") or "")
+            if name_lt and name_en:
+                _cache["en" + name_lt] = name_en
+            if desc_lt and desc_en:
+                _cache["en" + desc_lt] = desc_en
+            pic = o.get("pic")
+            # a point-of-interest has no track of its own — give it a POINT geometry
+            # at its own coordinates so it can be marked on the route's map.
+            wkt = None
+            try:
+                lat, lng = float(o.get("lat")), float(o.get("lng"))
+                wkt = f"POINT({lng} {lat})"
+            except (TypeError, ValueError):
+                pass
+            parts.append({
+                "slug": f"{_bk_slug(route)}-poi-{oid}",
+                "num": len(parts) + 1,
+                "name_lt": name_lt,
+                "description_lt": desc_lt,
+                "images": [BK_IMG_BASE + pic] if pic else [],
+                "local_images": [],
+                "wkt": wkt,
+            })
+    return parts
+
+
+def load_baltukelias():
+    """Turn the scraped source_data/baltukelias/routes.json into trail entries.
+    The source carries native LT + EN names/descriptions (no RU), so we seed the
+    translation cache with the native English and let RU be machine-translated
+    from Lithuanian like everything else. Geometry comes from `filterpoints`,
+    distance/duration from the numeric `distance` (m) / `time` (s) fields, and
+    photos are the remote `large/` image URLs. Each route is attributed to the
+    Baltukelias project and its `segments[].objects` become "points to see"
+    trail parts."""
+    path = os.path.join(BK_DIR, "routes.json")
+    if not os.path.exists(path):
+        return []
+    routes = json.load(open(path, encoding="utf-8"))
+    en_path = os.path.join(BK_DIR, "objects_en.json")
+    objects_en = json.load(open(en_path, encoding="utf-8")) if os.path.exists(en_path) else {}
+    out = []
+    for route in routes.values():
+        wkt = _wkt_from_points(route.get("filterpoints") or [])
+        if not wkt:
+            continue
+        c = _wkt_centroid(wkt) or (0.0, 0.0)
+        nm = route.get("name") or {}
+        name_lt = _fix_caps(nm.get("1") or nm.get("2") or "")
+        name_en = _fix_caps(nm.get("2") or "")
+        ds = route.get("description") or {}
+        desc_lt = _html_to_text(ds.get("1") or ds.get("2") or "")
+        desc_en = _html_to_text(ds.get("2") or "")
+        if name_lt and name_en:                       # native EN beats machine translation
+            _cache["en" + name_lt] = name_en
+        if desc_lt and desc_en:
+            _cache["en" + desc_lt] = desc_en
+        m = str(route.get("distance") or "")
+        sec = str(route.get("time") or "")
+        km = round(int(m) / 1000, 1) if m.isdigit() else None
+        hrs = round(int(sec) / 3600, 1) if sec.isdigit() else None
+        imgs = [BK_IMG_BASE + p["file_name"]
+                for p in (route.get("pics") or []) if p.get("file_name")]
+        out.append({
+            "slug": _bk_slug(route), "name_lt": name_lt, "description_lt": desc_lt,
+            "type_lt": "", "features": [], "categories": [BK_CATEGORY],
+            "lat": c[0], "lng": c[1], "wkt": wkt,
+            "length": f"{km} km" if km else "",
+            "duration_lt": f"{hrs} val." if hrs else "",
+            "link": route.get("view_url") or "", "images": imgs, "local_images": [],
+            "author": route.get("author"), "parts": _bk_parts(route, objects_en),
+        })
+    return out
+
+
 # coordinate pair as it appears inline in the Lithuanian prose ("lat, lng")
 COORD_RE = re.compile(r"(\d{2}\.\d{3,})\s*,?\s*(\d{2}\.\d{3,})")
 
@@ -520,6 +682,10 @@ ct:hasSegment a owl:ObjectProperty ; rdfs:domain ct:Trail ; rdfs:range ct:TrailS
 ct:segmentNumber a owl:DatatypeProperty ; rdfs:domain ct:TrailSegment ; rdfs:range xsd:integer ;
     rdfs:label "segment order"@en , "atkarpos numeris"@lt , "номер участка"@ru .
 
+# --- attribution: who curated/published the route ---
+ct:author a owl:ObjectProperty ; rdfs:domain ct:Trail ; rdfs:range foaf:Agent ;
+    rdfs:label "author"@en , "autorius"@lt , "автор"@ru .
+
 # --- subjective characteristics (source taxonomy: scenic, barefoot, viewpoints, etc.) ---
 ct:Category a owl:Class ;
     rdfs:label "Subjective characteristic"@en , "Subjektyvi savybė"@lt , "Субъективная характеристика"@ru ;
@@ -556,6 +722,24 @@ def build_data(trails, prop_labels):
 
 """
     out = [head]
+    # authorship lives in the raw track data: each entry carries an author record
+    # ({id, name, type, website?, facebook?, instagram?}). Collect the distinct
+    # authors and emit one foaf agent individual per id.
+    authors_by_id = {}
+    for t in trails:
+        a = t.get("author")
+        if a and a.get("id"):
+            authors_by_id[a["id"]] = a
+    for aid, a in authors_by_id.items():
+        preds = [f'a foaf:{a.get("type", "Organization")}',
+                 f'foaf:name "{esc1(a["name"])}"']
+        if a.get("website"):
+            preds.append(f'schema:url <{a["website"]}>')
+        # compile_ttl derives website/facebook/instagram from schema:url + schema:sameAs
+        for key in ("website", "facebook", "instagram"):
+            if a.get(key):
+                preds.append(f'schema:sameAs <{a[key]}>')
+        out.append(f"ct:author-{aid} " + " ;\n    ".join(preds) + " .\n")
     geoms = 0
     for t in trails:
         s = t["slug"]; uri = f"ct:trail-{s}"
@@ -570,6 +754,8 @@ def build_data(trails, prop_labels):
             L.append(f"    ct:routeType {lit_langs(t['type'])} ;")
         for c in t.get("categories", []):
             L.append(f"    ct:category ct:cat-{c['id']} ;")
+        if t.get("author") and t["author"].get("id"):
+            L.append(f"    ct:author ct:author-{t['author']['id']} ;")
         km = num(t.get("length", ""))
         if km:
             L.append(f"    ct:distance ct:dist-{s} ;")
@@ -652,6 +838,9 @@ def main():
     tracks = load_track_files()
     raw += tracks
     print(f"loaded {len(tracks)} loose KML/KMZ tracks")
+    bk = load_baltukelias()
+    raw += bk
+    print(f"loaded {len(bk)} baltukelias.lt routes")
 
     # property labels (lt + translated en/ru), translated once
     prop_labels = {}

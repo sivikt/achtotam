@@ -32,6 +32,14 @@ FEATURE_PROP = {
     "audio-info": "audioInfo",
 }
 
+# the whole nesedeknamuose.lt catalogue is authored by the site owner; stamp every
+# scraped trail with this author record so authorship lives in the raw data.
+SITE_AUTHOR = {
+    "id": "ramunas", "name": "Ramūnas Šukauskas", "type": "Person",
+    "facebook": "https://www.facebook.com/nesedeknamuos",
+    "instagram": "https://www.instagram.com/nesedeknamuose",
+}
+
 
 def fetch(url):
     return urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=45).read()
@@ -247,6 +255,7 @@ def main():
             "gpx_file": f"source_data/gpx/{s}.gpx" if has_gpx else "",
             "categories": slug_cats.get(s, []),
             "parts": parts_out,
+            "author": SITE_AUTHOR,
         })
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=16) as ex:

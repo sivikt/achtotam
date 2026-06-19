@@ -9,6 +9,14 @@ function pairsToFlat(s: string): number[] | null {
   return flat.length >= 4 ? flat : null;
 }
 
+// a single [lon, lat] from a POINT(lon lat) — used to mark a point-only trail part.
+export function pointFromWKT(wkt: string): [number, number] | null {
+  const m = /POINT\s*\(\s*([-\d.]+)\s+([-\d.]+)\s*\)/i.exec(wkt);
+  if (!m) return null;
+  const lon = Number(m[1]), lat = Number(m[2]);
+  return isFinite(lon) && isFinite(lat) ? [lon, lat] : null;
+}
+
 export function lineStringsFromWKT(wkt: string): number[][] | null {
   const out: number[][] = [];
   const mm = /MULTILINESTRING\s*\((.*)\)\s*$/i.exec(wkt);

@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import * as Cesium from "cesium";
 import type { Segment, Trail } from "../data/types";
 import type { MapHandle, MapProps } from "./mapTypes";
-import { lineStringsFromWKT } from "../lib/wkt";
+import { lineStringsFromWKT, pointFromWKT } from "../lib/wkt";
 import { colorFor } from "../lib/lang";
 import { BASEMAPS, ESRI, OVERLAYS } from "../lib/basemaps";
 
@@ -377,9 +377,25 @@ const CesiumMap = forwardRef<MapHandle, MapProps>(function CesiumMap(props, ref)
     },
     highlightSegment(seg: Segment) {
       clearSegHighlight();
-      const lines = seg.wkt ? lineStringsFromWKT(seg.wkt) : null;
-      if (!lines) return;
+      if (!seg.wkt) return;
       const viewer = viewerRef.current!;
+      // a point-only part (no track): drop a gold pin at its coordinates and fly to it.
+      const pt = pointFromWKT(seg.wkt);
+      if (pt) {
+        segEntities.current.push(viewer.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(pt[0], pt[1]),
+          billboard: {
+            image: pinImage("#f5a623"), width: 30, height: 30,
+            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+        }) as Ent);
+        viewer.camera.flyTo({ duration: 1.0, destination: Cesium.Cartesian3.fromDegrees(pt[0], pt[1], 1200) });
+        requestRender();
+        return;
+      }
+      const lines = lineStringsFromWKT(seg.wkt);
+      if (!lines) return;
       const hi = Cesium.Color.fromCssColorString("#ffe14d");
       for (const flat of lines) {
         segEntities.current.push(viewer.entities.add({

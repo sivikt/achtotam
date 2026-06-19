@@ -3,7 +3,7 @@ import * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { MapHandle, MapProps } from "./mapTypes";
 import type { Segment, Trail } from "../data/types";
-import { lineStringsFromWKT } from "../lib/wkt";
+import { lineStringsFromWKT, pointFromWKT } from "../lib/wkt";
 import { colorFor } from "../lib/lang";
 import { basemapSources, overlaySource } from "../lib/basemaps";
 
@@ -49,7 +49,7 @@ const LeafletMap = forwardRef<MapHandle, MapProps>(function LeafletMap(props, re
   // per trail: the polylines (a MULTILINESTRING has several) and base colour
   const polys = useRef<Record<string, { layers: L.Polyline[]; color: string }>>({});
   const markers = useRef<L.Marker[]>([]);
-  const segLayers = useRef<L.Polyline[]>([]);
+  const segLayers = useRef<L.Layer[]>([]);
   const activeSlug = useRef<string | null>(null);
   const hoverSlug = useRef<string | null>(null);
 
@@ -210,9 +210,18 @@ const LeafletMap = forwardRef<MapHandle, MapProps>(function LeafletMap(props, re
     },
     highlightSegment(seg: Segment) {
       clearSegHighlight();
-      const lines = seg.wkt ? lineStringsFromWKT(seg.wkt) : null;
-      if (!lines) return;
+      if (!seg.wkt) return;
       const map = mapRef.current!;
+      // a point-only part: drop a gold pin and zoom to it.
+      const pt = pointFromWKT(seg.wkt);
+      if (pt) {
+        const m = L.marker([pt[1], pt[0]], { icon: pinIcon("#f5a623") });
+        m.addTo(map); segLayers.current.push(m);
+        map.setView([pt[1], pt[0]], Math.max(map.getZoom(), 14));
+        return;
+      }
+      const lines = lineStringsFromWKT(seg.wkt);
+      if (!lines) return;
       for (const flat of lines) {
         const pl = L.polyline(toLatLngs(flat), { color: "#ffe14d", weight: 7 });
         pl.addTo(map); segLayers.current.push(pl);

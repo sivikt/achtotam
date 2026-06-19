@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { Lang, RoutePoint, Segment, Trail } from "../data/types";
 import type { GalleryItem } from "./Gallery";
 import { I18N } from "../data/i18n";
@@ -70,6 +72,28 @@ const FacebookIcon = () => (
     <path d="M22 12a10 10 0 1 0-11.56 9.88v-6.99H7.9V12h2.54V9.8c0-2.5 1.49-3.89 3.78-3.89 1.09 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56V12h2.78l-.44 2.89h-2.34v6.99A10 10 0 0 0 22 12z" />
   </svg>
 );
+
+// display hostname for the external-site link (e.g. "baltukelias.lt"); the label
+// must reflect the actual source, not a hardcoded site.
+function hostOf(url: string): string {
+  try { return new URL(url).hostname.replace(/^www\./, ""); }
+  catch { return url; }
+}
+
+// descriptions arrive as prose (sometimes lightly marked-up); render as Markdown
+// so paragraphs/lists/links format cleanly instead of dumping raw text. Links open
+// in a new tab.
+function Markdown({ text, className }: { text: string; className: string }) {
+  if (!text) return null;
+  return (
+    <div className={className}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]}
+        components={{ a: ({ node: _n, ...p }) => <a {...p} target="_blank" rel="noopener noreferrer" /> }}>
+        {text}
+      </ReactMarkdown>
+    </div>
+  );
+}
 
 function Thumbs({ imgs, size, onOpen }: {
   imgs: string[]; size: "lg" | "sm"; onOpen: (items: GalleryItem[], index: number) => void;
@@ -205,7 +229,7 @@ export default function DetailPanel({ trail, lang, onClose, onNavigate, onOpenSe
         <div className="ddesc-sec">
           <span className="bglbl">{d.grpDesc}</span>
           <Thumbs imgs={imgs} size="lg" onOpen={onOpenGallery} />
-          <div className="ddesc">{pick(t.desc, lang)}</div>
+          <Markdown className="ddesc" text={pick(t.desc, lang)} />
         </div>
         {t.segments.length > 0 && (
           <div id="dParts">
@@ -222,7 +246,7 @@ export default function DetailPanel({ trail, lang, onClose, onNavigate, onOpenSe
                   </div>
                   <div className="pbody">
                     <Thumbs imgs={simgs} size="sm" onOpen={onOpenGallery} />
-                    {dsc && <div className="pdesc">{dsc}</div>}
+                    <Markdown className="pdesc" text={dsc} />
                   </div>
                 </div>
               );
@@ -233,7 +257,11 @@ export default function DetailPanel({ trail, lang, onClose, onNavigate, onOpenSe
           <div className="dauthor">
             <span className="bglbl">{d.author}</span>
             <div className="arow">
-              <span className="aname">{author.name}</span>
+              {author.website ? (
+                <a className="aname alink" href={author.website} target="_blank" rel="noopener noreferrer">{author.name}</a>
+              ) : (
+                <span className="aname">{author.name}</span>
+              )}
               {author.facebook && (
                 <a className="asocial" href={author.facebook} target="_blank" rel="noopener noreferrer"
                   title="Facebook" aria-label="Facebook"><FacebookIcon /></a>
@@ -245,7 +273,7 @@ export default function DetailPanel({ trail, lang, onClose, onNavigate, onOpenSe
             </div>
           </div>
         )}
-        {t.link && <a className="dlink" href={t.link} target="_blank" rel="noopener noreferrer">{d.openSite}</a>}
+        {t.link && <a className="dlink" href={t.link} target="_blank" rel="noopener noreferrer">{d.openSite} {hostOf(t.link)} →</a>}
       </div>
     </div>
   );

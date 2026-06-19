@@ -165,12 +165,24 @@ button.act.ico svg { width: 17px; height: 17px; display: block; }
 .ddesc-sec { margin-top: 10px; }
 .ddesc-sec .bglbl { display: block; margin-bottom: 6px; }
 .ddesc-sec .thumbs { margin-bottom: 8px; }
-.ddesc { font-size: 12px; line-height: 1.5; color: #3a4855; white-space: pre-wrap; }
+.ddesc { font-size: 12px; line-height: 1.5; color: #3a4855; }
+/* markdown-rendered prose: tight, even paragraph spacing (no giant gaps) */
+.ddesc > :first-child, .pdesc > :first-child { margin-top: 0; }
+.ddesc > :last-child, .pdesc > :last-child { margin-bottom: 0; }
+.ddesc p, .pdesc p { margin: 0 0 8px; }
+.ddesc ul, .ddesc ol, .pdesc ul, .pdesc ol { margin: 0 0 8px; padding-left: 18px; }
+.ddesc li, .pdesc li { margin: 2px 0; }
+.ddesc a, .pdesc a { color: #2f6dbf; }
+.ddesc h1, .ddesc h2, .ddesc h3, .ddesc h4,
+.pdesc h1, .pdesc h2, .pdesc h3, .pdesc h4 { font-size: 13px; margin: 10px 0 4px; }
+.ddesc img, .pdesc img { max-width: 100%; height: auto; border-radius: 6px; }
 .dlink { display: block; margin-top: 8px; font-size: 12px; color: #2f6dbf; }
 .dauthor { margin-top: 12px; }
 .dauthor .bglbl { display: block; margin-bottom: 5px; }
 .dauthor .arow { display: flex; align-items: center; gap: 8px; }
 .dauthor .aname { font-size: 12px; color: #1b2733; }
+.dauthor .aname.alink { color: #1f6dad; text-decoration: none; }
+.dauthor .aname.alink:hover { text-decoration: underline; }
 .dauthor .asocial { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 6px; border: 1px solid #d3dae2; background: #eef2f7; color: #3a4855; }
 .dauthor .asocial:hover { background: #d8e9f5; color: #1b2733; border-color: #9cc2dd; }
 .dauthor .asocial svg { width: 15px; height: 15px; display: block; }
@@ -209,7 +221,7 @@ button.act.ico svg { width: 17px; height: 17px; display: block; }
 .gstrip { display: flex; gap: 6px; margin-top: 16px; max-width: 92%; overflow-x: auto; padding: 4px; }
 .gthumb { height: 56px; width: 80px; object-fit: cover; border-radius: 4px; cursor: pointer; opacity: .5; border: 2px solid transparent; flex: none; }
 .gthumb.on, .gthumb:hover { opacity: 1; border-color: #6fb6ff; }
-.pdesc { font-size: 12px; line-height: 1.5; color: #3a4855; white-space: pre-wrap; margin-top: 7px; }
+.pdesc { font-size: 12px; line-height: 1.5; color: #3a4855; margin-top: 7px; }
 
 /* ---- mobile: map on top, tracks/filters/detail in a bottom sheet ---- */
 @media (max-width: 768px) {

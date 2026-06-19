@@ -50,14 +50,14 @@ function endpointsFromWKT(wkt) {
   return first ? { start: first, finish: last } : null;
 }
 
-// schema:QuantitativeValue blank node → { value, localized unit labels }.
-// The subject is a blank node, so query by the term itself (named-node helpers
-// won't match). The unit is a QUDT IRI whose labels live in the ontology.
+// ct:Quantity node → { value, localized unit labels }. The unit is a ct:Unit
+// individual (ct:unit-km / ct:unit-hour) whose multilingual rdfs:labels live in
+// the ontology.
 function quantity(node) {
   if (!node) return null;
-  const v = store.getObjects(node, DataFactory.namedNode(NS.schema + "value"), null)[0];
+  const v = store.getObjects(node, DataFactory.namedNode(NS.ct + "value"), null)[0];
   if (!v) return null;
-  const u = store.getObjects(node, DataFactory.namedNode(NS.schema + "unitCode"), null)[0];
+  const u = store.getObjects(node, DataFactory.namedNode(NS.ct + "unit"), null)[0];
   return { value: v.value, unit: u ? byLang(u.value, NS.rdfs + "label") : {} };
 }
 
@@ -70,20 +70,40 @@ const catLabels = {};
 for (const q of store.getQuads(null, NS.rdf + "type", DataFactory.namedNode(NS.ct + "Category"), null)) {
   catLabels[q.subject.value] = byLang(q.subject.value, NS.rdfs + "label");
 }
-// route geometry vocabulary: node URI → multilingual label (like catLabels)
+// route geometry vocabulary: stable key → multilingual label. ct:routeType now
+// carries the labels inline as lang-tagged literals on each trail, so the
+// vocabulary is collected per-trail (below) keyed by a slug of the label rather
+// than read from standalone RouteType individuals.
 const routeTypeLabels = {};
-for (const q of store.getQuads(null, NS.rdf + "type", DataFactory.namedNode(NS.ct + "RouteType"), null)) {
-  routeTypeLabels[q.subject.value] = byLang(q.subject.value, NS.rdfs + "label");
+const rtSlug = (m) =>
+  (m.en || m.lt || Object.values(m)[0] || "")
+    .toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+// resolve a trail's ct:routeType lang-literals to a stable key, registering its
+// labels in the shared vocabulary
+function routeTypeOf(s) {
+  const labels = byLang(s, NS.ct + "routeType");
+  if (!Object.keys(labels).length) return "";
+  const key = rtSlug(labels);
+  if (key && !routeTypeLabels[key]) routeTypeLabels[key] = labels;
+  return key;
 }
-// authors: foaf:Person node URI → { name, facebook?, instagram? }; social profiles
-// come from schema:sameAs and are bucketed by host.
+// authors: a foaf:Person (individual) or foaf:Organization (a publishing project
+// like Baltukelias) node URI → { name, website?, facebook?, instagram? }. Social
+// profiles come from schema:sameAs bucketed by host; website is schema:url.
 const authors = {};
-for (const q of store.getQuads(null, NS.rdf + "type", DataFactory.namedNode(NS.foaf + "Person"), null)) {
+const authorNodes = [
+  ...store.getQuads(null, NS.rdf + "type", DataFactory.namedNode(NS.foaf + "Person"), null),
+  ...store.getQuads(null, NS.rdf + "type", DataFactory.namedNode(NS.foaf + "Organization"), null),
+];
+for (const q of authorNodes) {
   const s = q.subject.value;
   const sameAs = objs(s, NS.schema + "sameAs").map((o) => o.value);
   const a = { name: one(s, NS.foaf + "name")?.value || "" };
+  const web = one(s, NS.schema + "url")?.value;
   const fb = sameAs.find((u) => /facebook\.com/i.test(u));
   const ig = sameAs.find((u) => /instagram\.com/i.test(u));
+  if (web) a.website = web;
   if (fb) a.facebook = fb;
   if (ig) a.instagram = ig;
   authors[s] = a;
@@ -98,7 +118,7 @@ for (const q of store.getQuads(null, NS.rdf + "type", DataFactory.namedNode(NS.c
     slug: s.replace(NS.ct + "trail-", ""),
     name: byLang(s, NS.rdfs + "label"),
     desc: byLang(s, NS.dcterms + "description"),
-    routeType: one(s, NS.ct + "routeType")?.value || "",
+    routeType: routeTypeOf(s),
     author: one(s, NS.ct + "author")?.value || "",
     distance: quantity(one(s, NS.ct + "distance")),
     duration: quantity(one(s, NS.ct + "duration")),
