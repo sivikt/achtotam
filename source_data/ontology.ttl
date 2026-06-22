@@ -92,7 +92,7 @@ ct:restArea a owl:DatatypeProperty , ct:TrailProperty ;
 
 ct:campsite a owl:DatatypeProperty , ct:TrailProperty ;
     rdfs:domain ct:Trail ; rdfs:range xsd:boolean ;
-    rdfs:label "Stovyklavietė"@lt , "Campsite"@en , "Кемпинг"@ru .
+    rdfs:label "Stovyklavietė"@lt , "Campsite"@en , "Лагерь"@ru .
 
 ct:benches a owl:DatatypeProperty , ct:TrailProperty ;
     rdfs:domain ct:Trail ; rdfs:range xsd:boolean ;
@@ -169,3 +169,9 @@ ct:cat-epam-hiking-club a ct:Category ;
 
 ct:cat-baltu-kelias a ct:Category ;
     rdfs:label "Baltų kelias"@lt , "Balts’ Road"@en , "Путь балтов"@ru .
+
+ct:cat-saugoma a ct:Category ;
+    rdfs:label "Saugomos teritorijos"@lt , "Protected areas"@en , "Охраняемые территории"@ru .
+
+ct:cat-protected a ct:Category ;
+    rdfs:label "Saugoma"@lt , "Saugoma"@en , "Saugoma"@ru .

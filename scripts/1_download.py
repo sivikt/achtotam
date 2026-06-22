@@ -4,18 +4,19 @@
 For every trail it collects: Lithuanian name, description, structured amenity
 features, gallery images, GPS coordinates, length / duration / route type, and
 the GPX track. GPX files and (capped) gallery images are saved locally; the
-structured result is written to build/tracks_raw.json.
+structured result is written to source_data/nesedeknamuose/tracks_raw.json.
 
 Re-running is cheap: existing GPX / image files are skipped.
 """
 import os, re, json, html, urllib.request, urllib.parse, concurrent.futures
 
 ROOT      = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC       = os.path.join(ROOT, "source_data")   # raw downloaded inputs
+SRC       = os.path.join(ROOT, "source_data")              # raw downloaded inputs
+OUT_DIR   = os.path.join(SRC, "nesedeknamuose")            # this source's own subfolder
 LIST_URL  = "https://nesedeknamuose.lt/pazintiniai-takai/"
-GPX_DIR   = os.path.join(SRC, "gpx")
-IMG_DIR   = os.path.join(SRC, "images")
-OUT       = os.path.join(SRC, "tracks_raw.json")
+GPX_DIR   = os.path.join(OUT_DIR, "gpx")
+IMG_DIR   = os.path.join(OUT_DIR, "images")
+OUT       = os.path.join(OUT_DIR, "tracks_raw.json")
 IMG_CAP   = 6          # gallery images to download per trail
 UA        = {"User-Agent": "Mozilla/5.0 (compatible; trail-archiver/1.0)"}
 
@@ -196,7 +197,7 @@ def download(url, path):
 
 
 def main():
-    os.makedirs(SRC, exist_ok=True)
+    os.makedirs(OUT_DIR, exist_ok=True)
     markers = get_markers()
     print(f"listing: {len(markers)} trails")
 
@@ -223,7 +224,7 @@ def main():
             ext = os.path.splitext(urllib.parse.urlparse(url).path)[1] or ".jpg"
             rel = f"images/{s}/{n:02d}{ext}"           # web path (served from /images)
             local_imgs.append(rel)
-            img_jobs.append((url, os.path.join(SRC, rel)))
+            img_jobs.append((url, os.path.join(OUT_DIR, rel)))
         # multipart segments: own gpx track + own (capped) gallery
         parts_out = []
         for pi, p in enumerate(t.get("parts", []), 1):
@@ -234,11 +235,11 @@ def main():
                 ext = os.path.splitext(urllib.parse.urlparse(url).path)[1] or ".jpg"
                 rel = f"images/{ps}/{n:02d}{ext}"
                 p_local.append(rel)
-                img_jobs.append((url, os.path.join(SRC, rel)))
+                img_jobs.append((url, os.path.join(OUT_DIR, rel)))
             parts_out.append({
                 "slug": ps, "num": pi, "name_lt": p["name_lt"],
                 "description_lt": p["description_lt"],
-                "gpx_source": p["gpx_source"], "gpx_file": f"source_data/gpx/{ps}.gpx",
+                "gpx_source": p["gpx_source"], "gpx_file": f"source_data/nesedeknamuose/gpx/{ps}.gpx",
                 "images": p_imgs, "local_images": p_local,
             })
         out.append({
@@ -252,7 +253,7 @@ def main():
             "images": t["images"],
             "local_images": local_imgs,
             "gpx_source": t["gpx_source"] if has_gpx else None,
-            "gpx_file": f"source_data/gpx/{s}.gpx" if has_gpx else "",
+            "gpx_file": f"source_data/nesedeknamuose/gpx/{s}.gpx" if has_gpx else "",
             "categories": slug_cats.get(s, []),
             "parts": parts_out,
             "author": SITE_AUTHOR,

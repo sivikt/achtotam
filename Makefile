@@ -19,7 +19,7 @@ NPM := npm
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install data download download-baltukelias ontology compile build dev preview serve clean distclean
+.PHONY: help install data download download-baltukelias download-saugoma ontology compile build dev preview serve clean distclean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -31,16 +31,19 @@ node_modules: package.json ## Install npm dependencies when missing/stale
 
 install: node_modules ## Install all dependencies
 
-download: ## Scrape trails from nesedeknamuose.lt into source_data/ (network)
+download: ## Scrape trails from nesedeknamuose.lt into source_data/nesedeknamuose/ (network)
 	$(PY) scripts/1_download.py
 
 download-baltukelias: ## Scrape Balts' Road routes from baltukelias.lt into source_data/baltukelias/ (network)
 	$(PY) scripts/1b_download_baltukelias.py
 
+download-saugoma: ## Scrape saugoma.lt cognitive trails into source_data/saugoma/ (network)
+	$(PY) scripts/1c_download_saugoma.py
+
 ontology: ## Translate + emit source_data/ontology.ttl and data.ttl (network)
 	$(PY) scripts/2_build_ontology.py
 
-data: download download-baltukelias ontology ## Full data refresh: scrape then rebuild the ontology
+data: download download-baltukelias download-saugoma ontology ## Full data refresh: scrape then rebuild the ontology
 
 compile: ## Compile source_data/*.ttl into src/generated/trails.ts
 	$(NPM) run compile:data

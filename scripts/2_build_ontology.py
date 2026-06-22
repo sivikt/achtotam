@@ -16,10 +16,11 @@ import os, re, json, time, html, zipfile, unicodedata, urllib.request, urllib.pa
 
 ROOT  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC   = os.path.join(ROOT, "source_data")
-RAW   = os.path.join(SRC, "tracks_raw.json")
+RAW   = os.path.join(SRC, "nesedeknamuose", "tracks_raw.json")
 TRACKS_DIR = os.path.join(SRC, "yurii_hiking_tracks")   # loose KML/KMZ track files
 BK_DIR = os.path.join(SRC, "baltukelias")               # scraped baltukelias.lt routes
 BK_IMG_BASE = "https://www.baltukelias.lt/data/tourism_objects/large/"
+SG_DIR = os.path.join(SRC, "saugoma")                    # scraped saugoma.lt objects
 CACHE = os.path.join(SRC, "translations_cache.json")
 UA    = {"User-Agent": "Mozilla/5.0"}
 LANGS = ["en", "ru"]
@@ -515,6 +516,64 @@ def load_baltukelias():
     return out
 
 
+# ---------------------------------------------------------------- saugoma.lt
+# the saugoma.lt objects (cognitive trails, cycling routes, lakeside campsites) are
+# tagged with this fixed subjective category (a proper noun, curated not translated)
+SG_CATEGORY = {"id": "saugoma", "name_lt": "Saugomos teritorijos",
+               "label": {"lt": "Saugomos teritorijos", "en": "Protected areas",
+                         "ru": "Охраняемые территории"}}
+# short characteristic tag every saugoma object carries (a fixed proper-noun label,
+# shown identically in every language rather than machine-translated).
+SG_TAG = {"id": "protected", "name_lt": "Saugoma",
+          "label": {"lt": "Saugoma", "en": "Saugoma", "ru": "Saugoma"}}
+
+
+def _seed_native(lt, by_lang):
+    """Seed the translation cache so the source's own EN/RU text is used verbatim
+    rather than machine-translated from the Lithuanian (keyed exactly as
+    translate() looks it up: target-lang + LT source string)."""
+    for l in LANGS:
+        if lt and by_lang.get(l):
+            _cache[l + lt] = by_lang[l]
+
+
+def load_saugoma():
+    """Turn the scraped source_data/saugoma/objects.json into trail entries. Each
+    object ships native LT/EN/RU title, type and description, so we seed the
+    translation cache with the native EN/RU and feed the Lithuanian through the
+    normal pipeline. Geometry is a MULTILINESTRING for the trails that own a track
+    and a POINT for the point-located objects (cycling routes, campsites). Every
+    object is attributed to the State Service for Protected Areas."""
+    path = os.path.join(SG_DIR, "objects.json")
+    if not os.path.exists(path):
+        return []
+    objs = json.load(open(path, encoding="utf-8"))
+    out = []
+    for o in objs:
+        name = o.get("name") or {}
+        name_lt = (name.get("lt") or "").strip()
+        desc = {l: _html_to_text(v) for l, v in (o.get("description") or {}).items()}
+        rtype = {l: (v or "").strip() for l, v in (o.get("object_type") or {}).items()}
+        desc_lt, type_lt = desc.get("lt", ""), rtype.get("lt", "")
+        _seed_native(name_lt, name)
+        _seed_native(desc_lt, desc)
+        _seed_native(type_lt, rtype)
+        # saugoma filenames carry spaces/parens; percent-encode so each remote URL
+        # is a valid foaf:depiction IRI. Serve them remotely like baltukelias (the
+        # sg- local copies aren't on the served image path), so local_images stays [].
+        images = [urllib.parse.quote(u, safe="/:") for u in (o.get("images") or [])]
+        out.append({
+            "slug": o["slug"], "name_lt": name_lt, "description_lt": desc_lt,
+            "type_lt": type_lt, "features": [], "categories": [SG_CATEGORY, SG_TAG],
+            "lat": o.get("lat"), "lng": o.get("lng"), "wkt": o.get("wkt"),
+            "length": "", "duration_lt": "",
+            "link": o.get("link") or "", "images": images,
+            "local_images": [],
+            "author": o.get("author"), "parts": [],
+        })
+    return out
+
+
 # coordinate pair as it appears inline in the Lithuanian prose ("lat, lng")
 COORD_RE = re.compile(r"(\d{2}\.\d{3,})\s*,?\s*(\d{2}\.\d{3,})")
 
@@ -841,6 +900,9 @@ def main():
     bk = load_baltukelias()
     raw += bk
     print(f"loaded {len(bk)} baltukelias.lt routes")
+    sg = load_saugoma()
+    raw += sg
+    print(f"loaded {len(sg)} saugoma.lt objects")
 
     # property labels (lt + translated en/ru), translated once
     prop_labels = {}
