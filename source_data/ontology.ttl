@@ -175,3 +175,9 @@ ct:cat-saugoma a ct:Category ;
 
 ct:cat-protected a ct:Category ;
     rdfs:label "Saugoma"@lt , "Saugoma"@en , "Saugoma"@ru .
+
+ct:cat-telsiai-region a ct:Category ;
+    rdfs:label "Telšių kraštas"@lt , "Telšiai region"@en , "Тельшяйский край"@ru .
+
+ct:cat-telsiai a ct:Category ;
+    rdfs:label "Telšiai"@lt , "Telšiai"@en , "Telšiai"@ru .

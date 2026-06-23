@@ -19,7 +19,7 @@ NPM := npm
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install data download download-baltukelias download-saugoma ontology compile build dev preview serve clean distclean
+.PHONY: help install data download download-baltukelias download-saugoma download-telsiai ontology compile build dev preview serve clean distclean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -40,10 +40,13 @@ download-baltukelias: ## Scrape Balts' Road routes from baltukelias.lt into sour
 download-saugoma: ## Scrape saugoma.lt cognitive trails into source_data/saugoma/ (network)
 	$(PY) scripts/1c_download_saugoma.py
 
+download-telsiai: ## Scrape visit.telsiai.lt routes into source_data/telsiai/ (network)
+	$(PY) scripts/1d_download_telsiai.py
+
 ontology: ## Translate + emit source_data/ontology.ttl and data.ttl (network)
 	$(PY) scripts/2_build_ontology.py
 
-data: download download-baltukelias download-saugoma ontology ## Full data refresh: scrape then rebuild the ontology
+data: download download-baltukelias download-saugoma download-telsiai ontology ## Full data refresh: scrape then rebuild the ontology
 
 compile: ## Compile source_data/*.ttl into src/generated/trails.ts
 	$(NPM) run compile:data

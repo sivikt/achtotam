@@ -14,7 +14,7 @@ source_data/baltukelias/routes.json, and archive each route's photos under
 source_data/baltukelias/images/<slug>/. Step 2 (load_baltukelias) turns this
 raw JSON into ontology trail entries.
 """
-import os, re, json, urllib.request
+import os, json, urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT  = os.path.join(ROOT, "source_data", "baltukelias")

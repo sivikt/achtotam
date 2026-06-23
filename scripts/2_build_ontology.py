@@ -21,6 +21,8 @@ TRACKS_DIR = os.path.join(SRC, "yurii_hiking_tracks")   # loose KML/KMZ track fi
 BK_DIR = os.path.join(SRC, "baltukelias")               # scraped baltukelias.lt routes
 BK_IMG_BASE = "https://www.baltukelias.lt/data/tourism_objects/large/"
 SG_DIR = os.path.join(SRC, "saugoma")                    # scraped saugoma.lt objects
+TL_DIR = os.path.join(SRC, "telsiai")                    # scraped visit.telsiai.lt routes
+TL_IMG_BASE = "https://visit.telsiai.lt/data/tourism_objects/large/"
 CACHE = os.path.join(SRC, "translations_cache.json")
 UA    = {"User-Agent": "Mozilla/5.0"}
 LANGS = ["en", "ru"]
@@ -516,6 +518,68 @@ def load_baltukelias():
     return out
 
 
+TL_CATEGORY = {"id": "telsiai-region", "name_lt": "Telšių kraštas",
+               "label": {"lt": "Telšių kraštas", "en": "Telšiai region",
+                         "ru": "Тельшяйский край"}}
+# short characteristic tag every telsiai route carries (a fixed proper-noun label,
+# shown identically in every language rather than machine-translated).
+TL_TAG = {"id": "telsiai", "name_lt": "Telšiai",
+          "label": {"lt": "Telšiai", "en": "Telšiai", "ru": "Telšiai"}}
+
+
+def load_telsiai():
+    """Turn the scraped source_data/telsiai/routes.json into trail entries. Same
+    CMS shape as baltukelias, but each route carries native LT/EN/RU name and
+    description keyed by language id (1=LT, 2=EN, 3=RU); we seed the cache with
+    the native EN/RU so only missing strings are machine-translated. Geometry
+    comes from `filterpoints`, distance/duration from `distance` (m) / `time` (s),
+    and photos are the remote `large/` image URLs. Every route is attributed to
+    the Žemaitija Tourism Information Center."""
+    path = os.path.join(TL_DIR, "routes.json")
+    if not os.path.exists(path):
+        return []
+    routes = json.load(open(path, encoding="utf-8"))
+    out = []
+    for route in routes.values():
+        wkt = _wkt_from_points(route.get("filterpoints") or [])
+        if not wkt:
+            continue
+        c = _wkt_centroid(wkt) or (0.0, 0.0)
+        nm = route.get("name") or {}
+        name_lt = _fix_caps(nm.get("1") or nm.get("2") or "")
+        ds = route.get("description") or {}
+        desc_lt = _html_to_text(ds.get("1") or ds.get("2") or "")
+        # native EN (key 2) / RU (key 3) beat machine translation from Lithuanian
+        for lang, key in (("en", "2"), ("ru", "3")):
+            if name_lt and _fix_caps(nm.get(key) or ""):
+                _cache[lang + name_lt] = _fix_caps(nm[key])
+            native_desc = _html_to_text(ds.get(key) or "")
+            if desc_lt and native_desc:
+                _cache[lang + desc_lt] = native_desc
+        m = str(route.get("distance") or "")
+        sec = str(route.get("time") or "")
+        km = round(int(m) / 1000, 1) if m.isdigit() else None
+        hrs = round(int(sec) / 3600, 1) if sec.isdigit() else None
+        imgs = [TL_IMG_BASE + p["file_name"]
+                for p in (route.get("pics") or []) if p.get("file_name")]
+        out.append({
+            "slug": _tl_slug(route), "name_lt": name_lt, "description_lt": desc_lt,
+            "type_lt": "", "features": [], "categories": [TL_CATEGORY, TL_TAG],
+            "lat": c[0], "lng": c[1], "wkt": wkt,
+            "length": f"{km} km" if km else "",
+            "duration_lt": f"{hrs} val." if hrs else "",
+            "link": route.get("view_url") or "", "images": imgs, "local_images": [],
+            "author": route.get("author"), "parts": [],
+        })
+    return out
+
+
+def _tl_slug(route):
+    url = (route.get("view_url") or "").rstrip("/")
+    seg = url.rsplit("/", 1)[-1] if url else ""
+    return "tl-" + (seg or ("route-" + str(route.get("id"))))
+
+
 # ---------------------------------------------------------------- saugoma.lt
 # the saugoma.lt objects (cognitive trails, cycling routes, lakeside campsites) are
 # tagged with this fixed subjective category (a proper noun, curated not translated)
@@ -903,6 +967,9 @@ def main():
     sg = load_saugoma()
     raw += sg
     print(f"loaded {len(sg)} saugoma.lt objects")
+    tl = load_telsiai()
+    raw += tl
+    print(f"loaded {len(tl)} visit.telsiai.lt routes")
 
     # property labels (lt + translated en/ru), translated once
     prop_labels = {}
