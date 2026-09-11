@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { Lang, Segment, Trail } from "../data/types";
 import { I18N } from "../data/i18n";
-import { catLabels, propLabels, routeTypeLabels } from "../generated/trails";
+import { routeTypeLabels } from "../generated/trails";
+import { useSparql, byLang } from "../rdf/useSparql";
+import { CATEGORIES, PROPERTIES } from "../rdf/queries";
+import { NS } from "../rdf/store";
 import { colorFor, fmtQty, nameOf, pick } from "../lib/lang";
 import DetailPanel from "./DetailPanel";
 import MultiSelect from "./MultiSelect";
@@ -80,6 +83,16 @@ const SortIcon = () => (
 export default function Sidebar(p: Props) {
   const d = I18N[p.lang];
   const [filtersOpen, setFiltersOpen] = useState(false);
+
+  // filter vocabularies come straight from the graph: each is its own SPARQL
+  // SELECT, grouped into { lt, en, ru } label maps keyed by the term's URI (for
+  // categories) or short local name (for amenity properties).
+  const catRows = useSparql(CATEGORIES).rows;
+  const propRows = useSparql(PROPERTIES).rows;
+  const catLabels = byLang(catRows, "cat", "label");
+  const propLabels = byLang(
+    propRows.map((r) => ({ ...r, prop: (r.prop || "").replace(NS, "") })), "prop", "label");
+
   const themeUris = Object.keys(catLabels).sort((a, b) =>
     pick(catLabels[a], p.lang).toLowerCase().localeCompare(pick(catLabels[b], p.lang).toLowerCase(), p.lang));
   const attrKeys = Object.keys(propLabels).sort((a, b) =>
@@ -150,7 +163,7 @@ export default function Sidebar(p: Props) {
         {p.visible.map((t) => {
           const i = p.indexOf(t);
           const meta = [fmtQty(t.distance, p.lang), fmtQty(t.duration, p.lang),
-            t.routeType ? pick(routeTypeLabels[t.routeType], p.lang) : ""].filter(Boolean).join(" · ");
+            t.routeType ? pick(routeTypeLabels[t.routeType] || {}, p.lang) : ""].filter(Boolean).join(" · ");
           return (
             <div key={t.slug} ref={t.slug === p.activeSlug ? activeRef : null}
               className={"item" + (t.slug === p.activeSlug ? " active" : "")}

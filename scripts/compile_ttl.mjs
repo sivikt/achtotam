@@ -70,24 +70,14 @@ const catLabels = {};
 for (const q of store.getQuads(null, NS.rdf + "type", DataFactory.namedNode(NS.ct + "Category"), null)) {
   catLabels[q.subject.value] = byLang(q.subject.value, NS.rdfs + "label");
 }
-// route geometry vocabulary: stable key → multilingual label. ct:routeType now
-// carries the labels inline as lang-tagged literals on each trail, so the
-// vocabulary is collected per-trail (below) keyed by a slug of the label rather
-// than read from standalone RouteType individuals.
+// route geometry vocabulary: ct:RouteType individuals (like ct:Category), keyed
+// by node URI → multilingual label.
 const routeTypeLabels = {};
-const rtSlug = (m) =>
-  (m.en || m.lt || Object.values(m)[0] || "")
-    .toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-// resolve a trail's ct:routeType lang-literals to a stable key, registering its
-// labels in the shared vocabulary
-function routeTypeOf(s) {
-  const labels = byLang(s, NS.ct + "routeType");
-  if (!Object.keys(labels).length) return "";
-  const key = rtSlug(labels);
-  if (key && !routeTypeLabels[key]) routeTypeLabels[key] = labels;
-  return key;
+for (const q of store.getQuads(null, NS.rdf + "type", DataFactory.namedNode(NS.ct + "RouteType"), null)) {
+  routeTypeLabels[q.subject.value] = byLang(q.subject.value, NS.rdfs + "label");
 }
+// a trail's ct:routeType is now an object property → the individual's URI
+const routeTypeOf = (s) => one(s, NS.ct + "routeType")?.value || "";
 // authors: a foaf:Person (individual) or foaf:Organization (a publishing project
 // like Baltukelias) node URI → { name, website?, facebook?, instagram? }. Social
 // profiles come from schema:sameAs bucketed by host; website is schema:url.

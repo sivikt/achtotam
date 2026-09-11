@@ -2,6 +2,8 @@ import { type CSSProperties, type PointerEvent as RPointerEvent, useEffect, useM
 import type { Lang, Segment, Trail } from "./data/types";
 import { trails as allTrails, routeTypeLabels } from "./generated/trails";
 import { I18N } from "./data/i18n";
+import { useSparql } from "./rdf/useSparql";
+import { filteredTrails } from "./rdf/queries";
 import CesiumMap from "./components/CesiumMap";
 import LeafletMap from "./components/LeafletMap";
 import MapLibreMap from "./components/MapLibreMap";
@@ -208,17 +210,19 @@ export default function App() {
 
   // trails matching the content filters (search/theme/type/attributes) — but NOT
   // the map's view rectangle. This drives what's drawn on the map; the list adds
-  // the in-view narrowing on top.
-  const shownSlugs = useMemo(() => {
-    const f = search.trim().toLowerCase();
-    return new Set(allTrails.filter((t) => {
-      if (f && !Object.values(t.name).join(" ").toLowerCase().includes(f)) return false;
-      if (themeFilter.size && !t.categories.some((c) => themeFilter.has(c))) return false;
-      if (catFilter.size && !catFilter.has(t.routeType)) return false;
-      if (attrFilter.size && ![...attrFilter].every((a) => t.props.includes(a))) return false;
-      return true;
-    }).map((t) => t.slug));
-  }, [search, themeFilter, catFilter, attrFilter, lang]);
+  // the in-view narrowing on top. The membership decision is a SPARQL query
+  // against the in-memory graph: each filter facet is a graph pattern, so the set
+  // comes straight from the RDF rather than a hand-written JS predicate.
+  const filterQuery = useMemo(() => filteredTrails({
+    search,
+    themes: [...themeFilter],
+    cats: [...catFilter],
+    attrs: [...attrFilter],
+  }), [search, themeFilter, catFilter, attrFilter]);
+  const { rows: shownRows } = useSparql(filterQuery, [filterQuery]);
+  const shownSlugs = useMemo(
+    () => new Set(shownRows.map((r) => r.slug).filter((s): s is string => !!s)),
+    [shownRows]);
 
   const visible = useMemo(() => {
     const out = allTrails.filter((t) => {
