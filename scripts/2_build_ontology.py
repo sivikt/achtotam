@@ -714,8 +714,8 @@ def synthesize_parts(r):
 # ---------------------------------------------------------------- output helpers
 def write_ttl(name, text):
     """Write the generated Turtle file into source_data/. The Turtle is itself a
-    derived part of the source data; the React build (scripts/compile_ttl.mjs)
-    compiles it into a typed TS module at build time."""
+    derived part of the source data; the React app loads it at runtime and
+    queries it with SPARQL (see src/rdf/)."""
     open(os.path.join(SRC, name), "w", encoding="utf-8").write(text)
 
 
@@ -858,7 +858,7 @@ def build_data(trails, prop_labels):
                  f'foaf:name "{esc1(a["name"])}"']
         if a.get("website"):
             preds.append(f'schema:url <{a["website"]}>')
-        # compile_ttl derives website/facebook/instagram from schema:url + schema:sameAs
+        # the app derives website/facebook/instagram from schema:url + schema:sameAs
         for key in ("website", "facebook", "instagram"):
             if a.get(key):
                 preds.append(f'schema:sameAs <{a[key]}>')

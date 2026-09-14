@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Lang, Segment, Trail } from "../data/types";
 import { I18N } from "../data/i18n";
-import { routeTypeLabels } from "../generated/trails";
+import { useTrailData } from "../rdf/RdfProvider";
 import { useSparql, byLang } from "../rdf/useSparql";
 import { CATEGORIES, PROPERTIES } from "../rdf/queries";
 import { NS } from "../rdf/store";
@@ -82,6 +82,7 @@ const SortIcon = () => (
 
 export default function Sidebar(p: Props) {
   const d = I18N[p.lang];
+  const { routeTypeLabels } = useTrailData();
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   // filter vocabularies come straight from the graph: each is its own SPARQL

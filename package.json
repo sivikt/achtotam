@@ -5,10 +5,7 @@
   "type": "module",
   "description": "Ontology-driven 3D viewer for Lithuanian cognitive trails (source: nesedeknamuose.lt)",
   "scripts": {
-    "compile:data": "node scripts/compile_ttl.mjs",
-    "predev": "npm run compile:data",
     "dev": "vite",
-    "prebuild": "npm run compile:data",
     "build": "tsc -b && vite build",
     "preview": "vite preview"
   },
