@@ -15,6 +15,7 @@ export interface BuiltData {
   catLabels: Record<string, LangMap>;
   routeTypeLabels: Record<string, LangMap>;
   authors: Record<string, Author>;
+  ui: Record<string, LangMap>; // UI-string key (ct:ui-<key> → <key>) → langmap
 }
 
 // first and last vertex of a WKT geometry (path order), as [lng,lat] — mirrors
@@ -70,6 +71,11 @@ async function assemble(): Promise<BuiltData> {
     propLabels[uri.replace(NS, "")] = labels;
   const catLabels = langBy(await select(`SELECT ?c ?label WHERE { ?c a ct:Category ; rdfs:label ?label }`), "c", "label");
   const routeTypeLabels = langBy(await select(`SELECT ?rt ?label WHERE { ?rt a ct:RouteType ; rdfs:label ?label }`), "rt", "label");
+  // UI strings: ct:ui-<key> individuals → { key → langmap }, stripping the prefix
+  const ui: Record<string, LangMap> = {};
+  for (const [uri, labels] of Object.entries(
+    langBy(await select(`SELECT ?u ?label WHERE { ?u a ct:UILabel ; rdfs:label ?label }`), "u", "label")))
+    ui[uri.replace(NS + "ui-", "")] = labels;
 
   // --- authors ---
   const authorRows = await select(`SELECT ?a ?name ?url ?sameAs WHERE {
@@ -184,5 +190,5 @@ async function assemble(): Promise<BuiltData> {
   // the positional colour/index used in shared links stays put)
   trails.sort((a, b) => (a.name.lt || "").toLowerCase().localeCompare((b.name.lt || "").toLowerCase(), "lt"));
 
-  return { trails, propLabels, catLabels, routeTypeLabels, authors };
+  return { trails, propLabels, catLabels, routeTypeLabels, authors, ui };
 }

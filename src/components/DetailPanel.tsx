@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Lang, RoutePoint, Segment, Trail } from "../data/types";
 import type { GalleryItem } from "./Gallery";
-import { I18N } from "../data/i18n";
+import { useStrings } from "../data/i18n";
 import { useSparql, byLang } from "../rdf/useSparql";
 import { NS } from "../rdf/store";
 import { trailCategories, trailProps, trailRouteType, trailAuthor } from "../rdf/queries";
@@ -117,7 +117,7 @@ export default function DetailPanel({ trail, lang, onClose, onNavigate, onOpenSe
   const [openSeg, setOpenSeg] = useState<number | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const d = I18N[lang];
+  const d = useStrings(lang);
 
   // reset transient state whenever the shown trail changes
   useEffect(() => { setOpenSeg(null); setMenuOpen(false); onOpenSegment(null); }, [trail?.slug]);

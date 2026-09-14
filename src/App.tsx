@@ -1,6 +1,6 @@
 import { type CSSProperties, type PointerEvent as RPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Lang, Segment, Trail } from "./data/types";
-import { I18N } from "./data/i18n";
+import { useStrings } from "./data/i18n";
 import { useSparql } from "./rdf/useSparql";
 import { useTrailData } from "./rdf/RdfProvider";
 import { filteredTrails } from "./rdf/queries";
@@ -377,7 +377,7 @@ export default function App() {
     ? (sheet.level === 0 ? "sheet-collapsed" : sheet.level === 2 ? "sheet-full" : "")
     : (sidebarOpen ? "" : "sidebar-collapsed");
 
-  const d = I18N[lang];
+  const d = useStrings(lang);
 
   // shared across all three engines (same MapHandle/MapProps contract); a distinct
   // key per engine forces a full remount on switch so no stale viewer lingers.

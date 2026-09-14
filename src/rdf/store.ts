@@ -9,6 +9,8 @@ import { QueryEngine } from "@comunica/query-sparql-rdfjs";
 import ontologyTtl from "../../source_data/ontology.ttl?raw";
 // eslint-disable-next-line import/no-unresolved
 import dataTtl from "../../source_data/data.ttl?raw";
+// eslint-disable-next-line import/no-unresolved
+import uiTtl from "../../source_data/ui.ttl?raw";
 
 // Shared prefix header prepended to every query so per-view SPARQL stays short.
 export const PREFIXES = `
@@ -33,7 +35,7 @@ export function getGraph() {
     storePromise = (async () => {
       const store = new N3.Store();
       const parser = new N3.Parser();
-      for (const text of [ontologyTtl, dataTtl]) store.addQuads(parser.parse(text));
+      for (const text of [ontologyTtl, dataTtl, uiTtl]) store.addQuads(parser.parse(text));
       return { store, engine: new QueryEngine() };
     })();
   }

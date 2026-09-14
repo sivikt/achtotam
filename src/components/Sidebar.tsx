@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Lang, Segment, Trail } from "../data/types";
-import { I18N } from "../data/i18n";
+import { useStrings } from "../data/i18n";
 import { useTrailData } from "../rdf/RdfProvider";
 import { useSparql, byLang } from "../rdf/useSparql";
 import { CATEGORIES, PROPERTIES } from "../rdf/queries";
@@ -81,7 +81,7 @@ const SortIcon = () => (
 );
 
 export default function Sidebar(p: Props) {
-  const d = I18N[p.lang];
+  const d = useStrings(p.lang);
   const { routeTypeLabels } = useTrailData();
   const [filtersOpen, setFiltersOpen] = useState(false);
 

@@ -1,5 +1,12 @@
-import type { Lang } from "./types";
+import type { Lang, LangMap } from "./types";
+import { useTrailData } from "../rdf/RdfProvider";
+import { pick } from "../lib/lang";
 
+// UI strings now live in the graph (source_data/ui.ttl, built by
+// scripts/3_build_ui_labels.py) as ct:UILabel individuals. This module resolves
+// them into the flat { key: string } shape the components already consume, so
+// call sites stay `const d = useStrings(lang); … d.search` — only the source of
+// truth moved from a static table to the ontology.
 export interface Strings {
   title: string; subtitle: string; search: string; loadAll: string; clear: string;
   osm: string; labels: string; satellite: string; topo: string; layersTitle: string; basemapTitle: string; engineTitle: string; fullscreen: string; language: string; parts: string; shown: string; flyTo: string;
@@ -11,50 +18,17 @@ export interface Strings {
   allCats: string; allAttrs: string; allTypes: string; sortName: string; sortDist: string; sortDur: string; sortDir: string;
 }
 
-export const I18N: Record<Lang, Strings> = {
-  lt: {
-    title: "Pažintiniai takai", subtitle: "trasų · spustelėkite, kad parodytumėte žemėlapyje",
-    search: "Ieškoti…", loadAll: "Rodyti visus", clear: "Išvalyti",
-    osm: "Žemėlapis (OSM)", labels: "Vietovės ir keliai",
-    satellite: "Palydovinis vaizdas", topo: "Topografinis žemėlapis", layersTitle: "Sluoksniai", basemapTitle: "Pagrindas", engineTitle: "Žemėlapio variklis", fullscreen: "Visas ekranas", language: "Kalba", parts: "Atkarpos",
-    shown: "rodoma", flyTo: "Rodyti žemėlapyje", collapse: "Suskleisti / išskleisti",
-    openSite: "Atidaryti", openMap: "„Google“",
-    loading: "Įkeliama ontologija…", sortLbl: "Rūšiuoti", catLbl: "Subjektyvios savybės", typeLbl: "Geometrija", filters: "Filtrai",
-    attrLbl: "Savybės", allCats: "Visos charakteristikos", allAttrs: "Visos savybės", allTypes: "Bet kokia geometrija",
-    sortName: "Pavadinimas", sortDist: "Pagal atstumą", sortDur: "Pagal trukmę", sortDir: "Didėjimo / mažėjimo tvarka",
-    start: "Pradžia", finish: "Pabaiga", copy: "Kopijuoti koordinates",
-    copyStart: "pradžios koordinatės", copyFinish: "pabaigos koordinatės", menu: "Meniu",
-    grpSubjective: "Subjektyvus vertinimas", grpFacts: "Faktai", grpDesc: "Aprašymas",
-    share: "Dalintis", shareTelegram: "Į Telegram", shareInstagram: "Į Instagram", linkCopied: "Nuoroda nukopijuota", author: "Autorius",
-  },
-  en: {
-    title: "Cognitive trails", subtitle: "trails · click to show on the map",
-    search: "Search…", loadAll: "Show all", clear: "Clear",
-    osm: "Map (OSM)", labels: "Places & streets",
-    satellite: "Satellite imagery", topo: "Topographic map", layersTitle: "Layers", basemapTitle: "Basemap", engineTitle: "Map engine", fullscreen: "Fullscreen", language: "Language", parts: "Sections",
-    shown: "shown", flyTo: "Show on map", collapse: "Collapse / expand",
-    openSite: "Open on", openMap: "in Google",
-    loading: "Loading ontology…", sortLbl: "Sort", catLbl: "Subjective characteristics", typeLbl: "Geometry", filters: "Filters",
-    attrLbl: "Attributes", allCats: "All characteristics", allAttrs: "All attributes", allTypes: "Any geometry",
-    sortName: "Name", sortDist: "Distance", sortDur: "Duration", sortDir: "Ascending / descending",
-    start: "Start", finish: "Finish", copy: "Copy coordinates",
-    copyStart: "start coordinates", copyFinish: "finish coordinates", menu: "Menu",
-    grpSubjective: "Subjective attitude", grpFacts: "Facts", grpDesc: "Description",
-    share: "Share", shareTelegram: "to Telegram", shareInstagram: "to Instagram", linkCopied: "Link copied", author: "Author",
-  },
-  ru: {
-    title: "Познавательные тропы", subtitle: "троп · нажмите, чтобы показать на карте",
-    search: "Поиск…", loadAll: "Показать все", clear: "Очистить",
-    osm: "Карта (OSM)", labels: "Места и улицы",
-    satellite: "Спутниковый снимок", topo: "Топографическая карта", layersTitle: "Слои", basemapTitle: "Базовая карта", engineTitle: "Движок карты", fullscreen: "Полный экран", language: "Язык", parts: "Участки",
-    shown: "показано", flyTo: "Показать на карте", collapse: "Свернуть / развернуть",
-    openSite: "Открыть на", openMap: "В Google",
-    loading: "Загрузка онтологии…", sortLbl: "Сортировка", catLbl: "Субъективные характеристики", typeLbl: "Геометрия", filters: "Фильтры",
-    attrLbl: "Свойства", allCats: "Все характеристики", allAttrs: "Все свойства", allTypes: "Любая геометрия",
-    sortName: "Название", sortDist: "По расстоянию", sortDur: "По длительности", sortDir: "По возрастанию / убыванию",
-    start: "Начало", finish: "Финиш", copy: "Копировать координаты",
-    copyStart: "координаты начала", copyFinish: "координаты финиша", menu: "Меню",
-    grpSubjective: "Субъективная оценка", grpFacts: "Факты", grpDesc: "Описание",
-    share: "Поделиться", shareTelegram: "В Telegram", shareInstagram: "В Instagram", linkCopied: "Ссылка скопирована", author: "Автор",
-  },
-};
+// Resolve the graph's UI label maps for one locale into a Strings object. A
+// missing key degrades to "" (pick handles the empty map) rather than throwing,
+// so a not-yet-translated label never crashes the UI.
+export function stringsFor(ui: Record<string, LangMap>, lang: Lang): Strings {
+  return new Proxy({} as Strings, {
+    get: (_t, key: string) => pick(ui[key] || {}, lang),
+  });
+}
+
+// Hook form for components: reads the UI labels from the ready RdfProvider.
+export function useStrings(lang: Lang): Strings {
+  const { ui } = useTrailData();
+  return stringsFor(ui, lang);
+}
