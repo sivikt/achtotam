@@ -31,6 +31,9 @@ export default defineConfig({
   // relative asset URLs so the built site works when hosted from any subpath
   base: "./",
   plugins: [react(), cesium(), sourceImages()],
+  // the ontology/data TTL live in source_data/ (outside the src/ root) and are
+  // imported with ?raw into the runtime RDF store; allow Vite to read them.
+  server: { fs: { allow: [".."] } },
   // outDir is relative to root; emit dist/ at the repo root, not src/dist
   build: { outDir: "../dist", emptyOutDir: true, target: "es2020", chunkSizeWarningLimit: 6000 },
 });

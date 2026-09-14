@@ -714,8 +714,8 @@ def synthesize_parts(r):
 # ---------------------------------------------------------------- output helpers
 def write_ttl(name, text):
     """Write the generated Turtle file into source_data/. The Turtle is itself a
-    derived part of the source data; the React build (scripts/compile_ttl.mjs)
-    compiles it into a typed TS module at build time."""
+    derived part of the source data; the React app loads it at runtime and
+    queries it with SPARQL (see src/rdf/)."""
     open(os.path.join(SRC, name), "w", encoding="utf-8").write(text)
 
 
@@ -731,6 +731,26 @@ def esc_ml(s):
 def lit_langs(values):
     """values: {lang: text} -> turtle literal list  '"x"@lt , "y"@en , "z"@ru'"""
     return " , ".join(f'"{esc1(v)}"@{l}' for l, v in values.items() if v)
+
+
+# route-type langmap -> the shared ct:RouteType individual, matched on the LT
+# label (the source-language identity). Kept in sync with the individuals emitted
+# by build_ontology(); an unknown label maps to ct:route-other.
+ROUTE_TYPE_BY_LT = {
+    "Žiedinis maršrutas": "route-circular",
+    "Linijinis maršrutas": "route-linear",
+    "Pažintinis, mokomasis takas": "route-educational",
+    "Kitas takas, trasa": "route-other",
+    "Stovyklavietė": "route-campsite",
+}
+
+
+def route_type_uri(type_map):
+    """{lt,en,ru} -> 'route-<x>' local name, or '' when the trail has no type."""
+    lt = (type_map or {}).get("lt", "").strip()
+    if not lt:
+        return ""
+    return ROUTE_TYPE_BY_LT.get(lt, "route-other")
 
 
 def num(s):
@@ -763,8 +783,26 @@ ct:Trail a owl:Class ;
 
 ct:gpxFile a owl:DatatypeProperty ; rdfs:domain ct:Trail ; rdfs:range xsd:anyURI ;
     rdfs:label "GPX file"@en , "GPX failas"@lt , "GPX файл"@ru .
-ct:routeType a owl:DatatypeProperty ; rdfs:domain ct:Trail ; rdfs:range rdf:langString ;
+
+# route geometry type: a shared vocabulary of individuals (like ct:Category), so
+# each type has a stable URI to key filters on and its labels live in one place.
+ct:RouteType a owl:Class ;
+    rdfs:label "Route type"@en , "Maršruto tipas"@lt , "Тип маршрута"@ru ;
+    rdfs:comment "The geometry/shape of a route (circular, linear, …)."@en .
+ct:routeType a owl:ObjectProperty ; rdfs:domain ct:Trail ; rdfs:range ct:RouteType ;
     rdfs:label "geometry"@en , "geometrija"@lt , "геометрия"@ru .
+
+# route type individuals — each carries a multilingual rdfs:label
+ct:route-circular a ct:RouteType ;
+    rdfs:label "Žiedinis maršrutas"@lt , "Circular route"@en , "Круговой маршрут"@ru .
+ct:route-linear a ct:RouteType ;
+    rdfs:label "Linijinis maršrutas"@lt , "Linear route"@en , "Линейный маршрут"@ru .
+ct:route-educational a ct:RouteType ;
+    rdfs:label "Pažintinis, mokomasis takas"@lt , "Cognitive, educational trail"@en , "Познавательная дорожка"@ru .
+ct:route-other a ct:RouteType ;
+    rdfs:label "Kitas takas, trasa"@lt , "Other path, route"@en , "Другая тропа, трасса"@ru .
+ct:route-campsite a ct:RouteType ;
+    rdfs:label "Stovyklavietė"@lt , "Campsite"@en , "Лагерь"@ru .
 
 # --- measured quantities (value + unit) ---
 ct:Quantity a owl:Class ;
@@ -858,7 +896,7 @@ def build_data(trails, prop_labels):
                  f'foaf:name "{esc1(a["name"])}"']
         if a.get("website"):
             preds.append(f'schema:url <{a["website"]}>')
-        # compile_ttl derives website/facebook/instagram from schema:url + schema:sameAs
+        # the app derives website/facebook/instagram from schema:url + schema:sameAs
         for key in ("website", "facebook", "instagram"):
             if a.get(key):
                 preds.append(f'schema:sameAs <{a[key]}>')
@@ -873,8 +911,9 @@ def build_data(trails, prop_labels):
             L.append(f'    schema:url <{t["link"]}> ;')
         if t.get("address_lt"):
             L.append(f'    schema:address "{esc1(t["address_lt"])}"@lt ;')
-        if any(t["type"].values()):
-            L.append(f"    ct:routeType {lit_langs(t['type'])} ;")
+        rt = route_type_uri(t["type"])
+        if rt:
+            L.append(f"    ct:routeType ct:{rt} ;")
         for c in t.get("categories", []):
             L.append(f"    ct:category ct:cat-{c['id']} ;")
         if t.get("author") and t["author"].get("id"):

@@ -1,4 +1,4 @@
-import type { Segment, Trail } from "../data/types";
+import type { Segment, Trail } from "../rdf/buildTrails";
 
 // the shared contract every map engine (Cesium / Leaflet / MapLibre) implements,
 // so App can swap them behind one ref. Lives in its own module rather than any

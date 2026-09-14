@@ -21,8 +21,25 @@ ct:Trail a owl:Class ;
 
 ct:gpxFile a owl:DatatypeProperty ; rdfs:domain ct:Trail ; rdfs:range xsd:anyURI ;
     rdfs:label "GPX file"@en , "GPX failas"@lt , "GPX файл"@ru .
-ct:routeType a owl:DatatypeProperty ; rdfs:domain ct:Trail ; rdfs:range rdf:langString ;
+# route geometry type: a shared vocabulary of individuals (like ct:Category), so
+# each type has a stable URI to key filters on and its labels live in one place.
+ct:RouteType a owl:Class ;
+    rdfs:label "Route type"@en , "Maršruto tipas"@lt , "Тип маршрута"@ru ;
+    rdfs:comment "The geometry/shape of a route (circular, linear, …)."@en .
+ct:routeType a owl:ObjectProperty ; rdfs:domain ct:Trail ; rdfs:range ct:RouteType ;
     rdfs:label "geometry"@en , "geometrija"@lt , "геометрия"@ru .
+
+# route type individuals — each carries a multilingual rdfs:label
+ct:route-circular a ct:RouteType ;
+    rdfs:label "Žiedinis maršrutas"@lt , "Circular route"@en , "Круговой маршрут"@ru .
+ct:route-linear a ct:RouteType ;
+    rdfs:label "Linijinis maršrutas"@lt , "Linear route"@en , "Линейный маршрут"@ru .
+ct:route-educational a ct:RouteType ;
+    rdfs:label "Pažintinis, mokomasis takas"@lt , "Cognitive, educational trail"@en , "Познавательная дорожка"@ru .
+ct:route-other a ct:RouteType ;
+    rdfs:label "Kitas takas, trasa"@lt , "Other path, route"@en , "Другая тропа, трасса"@ru .
+ct:route-campsite a ct:RouteType ;
+    rdfs:label "Stovyklavietė"@lt , "Campsite"@en , "Лагерь"@ru .
 
 # --- measured quantities (value + unit) ---
 ct:Quantity a owl:Class ;

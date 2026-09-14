@@ -1,4 +1,9 @@
-import type { Lang, LangMap, Quantity, Trail } from "../data/types";
+import type { Quantity, Trail } from "../rdf/buildTrails";
+
+// language primitives live here (the language module); they are UI/i18n types,
+// not part of the RDF data shape, so they are hand-declared rather than inferred.
+export type Lang = "lt" | "en" | "ru";
+export type LangMap = Partial<Record<string, string>>;
 
 export function pick(m: LangMap, lang: Lang): string {
   return m[lang] || m.en || m.lt || Object.values(m)[0] || "";

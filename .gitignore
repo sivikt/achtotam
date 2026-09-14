@@ -5,7 +5,6 @@ source_data/gpx
 source_data/tracks_raw.json
 source_data/translations_cache.json
 
-src/generated/trails.ts
 preview.log
 npm-install.log
 dev.log
@@ -22,3 +21,5 @@ source_data/telsiai
 .claude
 
 .DS_Store
+
+scripts/__pycache__

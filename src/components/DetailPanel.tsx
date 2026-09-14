@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { Lang, RoutePoint, Segment, Trail } from "../data/types";
+import type { Lang } from "../lib/lang";
+import type { RoutePoint, Segment, Trail } from "../rdf/buildTrails";
 import type { GalleryItem } from "./Gallery";
-import { I18N } from "../data/i18n";
-import { catLabels, propLabels, routeTypeLabels, authors } from "../generated/trails";
+import { useStrings } from "../data/i18n";
+import { useSparql, byLang } from "../rdf/useSparql";
+import { NS } from "../rdf/store";
+import { trailCategories, trailProps, trailRouteType, trailAuthor } from "../rdf/queries";
 import { fmtQty, nameOf, pick, slugify } from "../lib/lang";
 
 interface Props {
@@ -115,7 +118,7 @@ export default function DetailPanel({ trail, lang, onClose, onNavigate, onOpenSe
   const [openSeg, setOpenSeg] = useState<number | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const d = I18N[lang];
+  const d = useStrings(lang);
 
   // reset transient state whenever the shown trail changes
   useEffect(() => { setOpenSeg(null); setMenuOpen(false); onOpenSegment(null); }, [trail?.slug]);
@@ -133,12 +136,41 @@ export default function DetailPanel({ trail, lang, onClose, onNavigate, onOpenSe
     </div>
   );
 
+  // per-view SPARQL, scoped to the selected trail's URI (null when none shown, so
+  // useSparql skips). Categories/props come back as {uri|localname → langmap};
+  // route type + author are single-subject queries.
+  const uri = trail?.uri ?? null;
+  const catRows = useSparql(uri ? trailCategories(uri) : null, [uri]).rows;
+  const propRows = useSparql(uri ? trailProps(uri) : null, [uri]).rows;
+  const rtRows = useSparql(uri ? trailRouteType(uri) : null, [uri]).rows;
+  const authorRows = useSparql(uri ? trailAuthor(uri) : null, [uri]).rows;
+
   if (!trail) return null;
   const t = trail;
   const imgs = t.images.length ? t.images : t.localImages;
-  const author = t.author ? authors[t.author] : null;
+
+  const catLabels = byLang(catRows, "cat", "label");
+  const catUris = Object.keys(catLabels);
+  const propLabels = byLang(
+    propRows.map((r) => ({ ...r, prop: (r.prop || "").replace(NS, "") })), "prop", "label");
+  const propKeys = Object.keys(propLabels);
+
+  // author: name + optional website + facebook/instagram bucketed from sameAs
+  const author = authorRows.length ? (() => {
+    const sameAs = authorRows.map((r) => r.sameAs).filter(Boolean) as string[];
+    return {
+      name: authorRows[0].name || "",
+      website: authorRows.find((r) => r.url)?.url,
+      facebook: sameAs.find((u) => /facebook\.com/i.test(u)),
+      instagram: sameAs.find((u) => /instagram\.com/i.test(u)),
+    };
+  })() : null;
+
+  // route-type label map: single subject, so collect {lang → label} directly
+  const rtLabel: Record<string, string> = {};
+  for (const r of rtRows) if (r.label) rtLabel[r.label_lang || "lt"] = r.label;
   const meta = [fmtQty(t.distance, lang), fmtQty(t.duration, lang),
-    t.routeType ? pick(routeTypeLabels[t.routeType], lang) : ""].filter(Boolean).join(" · ");
+    pick(rtLabel, lang)].filter(Boolean).join(" · ");
 
   const toggleSeg = (k: number, seg: Segment) => {
     if (openSeg === k) { setOpenSeg(null); onOpenSegment(null); }
@@ -213,16 +245,16 @@ export default function DetailPanel({ trail, lang, onClose, onNavigate, onOpenSe
           </div>
         )}
         <div className="badges">
-          {t.categories.length > 0 && (
+          {catUris.length > 0 && (
             <div className="bgroup">
               <span className="bglbl">{d.grpSubjective}</span>
-              {t.categories.map((u) => <span key={u} className="badge cat">{pick(catLabels[u] || {}, lang)}</span>)}
+              {catUris.map((u) => <span key={u} className="badge cat">{pick(catLabels[u] || {}, lang)}</span>)}
             </div>
           )}
-          {t.props.length > 0 && (
+          {propKeys.length > 0 && (
             <div className="bgroup">
               <span className="bglbl">{d.grpFacts}</span>
-              {t.props.map((pr) => <span key={pr} className="badge">{pick(propLabels[pr] || {}, lang)}</span>)}
+              {propKeys.map((pr) => <span key={pr} className="badge">{pick(propLabels[pr] || {}, lang)}</span>)}
             </div>
           )}
         </div>

@@ -1,7 +1,10 @@
 import { type CSSProperties, type PointerEvent as RPointerEvent, useEffect, useMemo, useRef, useState } from "react";
-import type { Lang, Segment, Trail } from "./data/types";
-import { trails as allTrails, routeTypeLabels } from "./generated/trails";
-import { I18N } from "./data/i18n";
+import type { Lang } from "./lib/lang";
+import type { Segment, Trail } from "./rdf/buildTrails";
+import { useStrings } from "./data/i18n";
+import { useSparql } from "./rdf/useSparql";
+import { useTrailData } from "./rdf/RdfProvider";
+import { filteredTrails } from "./rdf/queries";
 import CesiumMap from "./components/CesiumMap";
 import LeafletMap from "./components/LeafletMap";
 import MapLibreMap from "./components/MapLibreMap";
@@ -11,31 +14,6 @@ import Gallery, { type GalleryItem } from "./components/Gallery";
 import { nameOf, pick, qtyNum, slugify } from "./lib/lang";
 import { lineStringsFromWKT } from "./lib/wkt";
 import { BASEMAPS, DEFAULT_BASEMAP, OVERLAYS, basemapKeys, overlayKeys } from "./lib/basemaps";
-
-// stable colour/index order, fixed once (matches generated order)
-const indexBySlug = new Map(allTrails.map((t, i) => [t.slug, i] as const));
-const trailBySlug = new Map(allTrails.map((t) => [t.slug, t] as const));
-
-// resolve a "route" URL value to a trail's stable slug. The URL carries the
-// trail name slugified in whatever locale was active when shared; we index every
-// locale (plus the stable slug, for old links) so any of them resolves.
-const routeIndex = (() => {
-  const m = new Map<string, string>();
-  for (const t of allTrails) {
-    m.set(t.slug, t.slug);
-    for (const lng of ["lt", "en", "ru"] as Lang[]) {
-      const s = slugify(pick(t.name, lng));
-      if (s && !m.has(s)) m.set(s, t.slug);
-    }
-  }
-  return m;
-})();
-const resolveRoute = (r: string | null) => (r ? routeIndex.get(r) ?? null : null);
-// the route value to put in the URL: trail name slugified in the active locale
-const routeSlug = (slug: string, lang: Lang) => {
-  const t = trailBySlug.get(slug);
-  return t ? slugify(nameOf(t, lang)) || slug : slug;
-};
 
 export interface ViewRect { w: number; s: number; e: number; n: number }
 
@@ -59,7 +37,6 @@ function repPoint(t: Trail): [number, number] | null {
   }
   return null;
 }
-const trailPoints = new Map(allTrails.map((t) => [t.slug, repPoint(t)] as const));
 
 const LayersIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -142,6 +119,37 @@ function pushUrl(p: URLSearchParams) {
 }
 
 export default function App() {
+  // trail data + vocab maps, assembled from the graph at load (the provider gates
+  // render until ready, so this is populated). The maps consume trails by index
+  // (index = colour), so a single stably-ordered array backs list + all engines.
+  const { trails: allTrails, routeTypeLabels } = useTrailData();
+
+  // derived indices, rebuilt if the data identity changes (once, in practice).
+  const { indexBySlug, trailBySlug, routeIndex, trailPoints } = useMemo(() => {
+    const indexBySlug = new Map(allTrails.map((t, i) => [t.slug, i] as const));
+    const trailBySlug = new Map(allTrails.map((t) => [t.slug, t] as const));
+    // resolve a "route" URL value to a trail's stable slug. The URL carries the
+    // name slugified in whatever locale was active when shared; index every locale
+    // (plus the stable slug, for old links) so any of them resolves.
+    const routeIndex = new Map<string, string>();
+    for (const t of allTrails) {
+      routeIndex.set(t.slug, t.slug);
+      for (const lng of ["lt", "en", "ru"] as Lang[]) {
+        const s = slugify(pick(t.name, lng));
+        if (s && !routeIndex.has(s)) routeIndex.set(s, t.slug);
+      }
+    }
+    // one representative [lng,lat] per trail, precomputed for fast in-view testing
+    const trailPoints = new Map(allTrails.map((t) => [t.slug, repPoint(t)] as const));
+    return { indexBySlug, trailBySlug, routeIndex, trailPoints };
+  }, [allTrails]);
+  const resolveRoute = (r: string | null) => (r ? routeIndex.get(r) ?? null : null);
+  // the route value to put in the URL: trail name slugified in the active locale
+  const routeSlug = (slug: string, lang: Lang) => {
+    const t = trailBySlug.get(slug);
+    return t ? slugify(nameOf(t, lang)) || slug : slug;
+  };
+
   const langParam = PARAMS.get("lang");
   const sortParam = PARAMS.get("sort");
   const routeParam = PARAMS.get("route");
@@ -208,17 +216,19 @@ export default function App() {
 
   // trails matching the content filters (search/theme/type/attributes) — but NOT
   // the map's view rectangle. This drives what's drawn on the map; the list adds
-  // the in-view narrowing on top.
-  const shownSlugs = useMemo(() => {
-    const f = search.trim().toLowerCase();
-    return new Set(allTrails.filter((t) => {
-      if (f && !Object.values(t.name).join(" ").toLowerCase().includes(f)) return false;
-      if (themeFilter.size && !t.categories.some((c) => themeFilter.has(c))) return false;
-      if (catFilter.size && !catFilter.has(t.routeType)) return false;
-      if (attrFilter.size && ![...attrFilter].every((a) => t.props.includes(a))) return false;
-      return true;
-    }).map((t) => t.slug));
-  }, [search, themeFilter, catFilter, attrFilter, lang]);
+  // the in-view narrowing on top. The membership decision is a SPARQL query
+  // against the in-memory graph: each filter facet is a graph pattern, so the set
+  // comes straight from the RDF rather than a hand-written JS predicate.
+  const filterQuery = useMemo(() => filteredTrails({
+    search,
+    themes: [...themeFilter],
+    cats: [...catFilter],
+    attrs: [...attrFilter],
+  }), [search, themeFilter, catFilter, attrFilter]);
+  const { rows: shownRows } = useSparql(filterQuery, [filterQuery]);
+  const shownSlugs = useMemo(
+    () => new Set(shownRows.map((r) => r.slug).filter((s): s is string => !!s)),
+    [shownRows]);
 
   const visible = useMemo(() => {
     const out = allTrails.filter((t) => {
@@ -368,7 +378,7 @@ export default function App() {
     ? (sheet.level === 0 ? "sheet-collapsed" : sheet.level === 2 ? "sheet-full" : "")
     : (sidebarOpen ? "" : "sidebar-collapsed");
 
-  const d = I18N[lang];
+  const d = useStrings(lang);
 
   // shared across all three engines (same MapHandle/MapProps contract); a distinct
   // key per engine forces a full remount on switch so no stale viewer lingers.

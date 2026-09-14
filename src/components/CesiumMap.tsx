@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import * as Cesium from "cesium";
-import type { Segment, Trail } from "../data/types";
+import type { Segment, Trail } from "../rdf/buildTrails";
 import type { MapHandle, MapProps } from "./mapTypes";
 import { lineStringsFromWKT, pointFromWKT } from "../lib/wkt";
 import { colorFor } from "../lib/lang";
