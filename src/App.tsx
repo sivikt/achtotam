@@ -1,5 +1,6 @@
 import { type CSSProperties, type PointerEvent as RPointerEvent, useEffect, useMemo, useRef, useState } from "react";
-import type { Lang, Segment, Trail } from "./data/types";
+import type { Lang } from "./lib/lang";
+import type { Segment, Trail } from "./rdf/buildTrails";
 import { useStrings } from "./data/i18n";
 import { useSparql } from "./rdf/useSparql";
 import { useTrailData } from "./rdf/RdfProvider";

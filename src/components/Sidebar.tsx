@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { Lang, Segment, Trail } from "../data/types";
+import type { Lang } from "../lib/lang";
+import type { Segment, Trail } from "../rdf/buildTrails";
 import { useStrings } from "../data/i18n";
 import { useTrailData } from "../rdf/RdfProvider";
 import { useSparql, byLang } from "../rdf/useSparql";

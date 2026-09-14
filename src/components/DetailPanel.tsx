@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { Lang, RoutePoint, Segment, Trail } from "../data/types";
+import type { Lang } from "../lib/lang";
+import type { RoutePoint, Segment, Trail } from "../rdf/buildTrails";
 import type { GalleryItem } from "./Gallery";
 import { useStrings } from "../data/i18n";
 import { useSparql, byLang } from "../rdf/useSparql";

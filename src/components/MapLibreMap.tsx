@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { MapHandle, MapProps } from "./mapTypes";
-import type { Segment, Trail } from "../data/types";
+import type { Segment, Trail } from "../rdf/buildTrails";
 import { lineStringsFromWKT, pointFromWKT } from "../lib/wkt";
 import { colorFor } from "../lib/lang";
 import { basemapSources, overlaySource } from "../lib/basemaps";

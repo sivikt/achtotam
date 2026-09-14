@@ -1,6 +1,5 @@
-import type { Lang, LangMap } from "./types";
 import { useTrailData } from "../rdf/RdfProvider";
-import { pick } from "../lib/lang";
+import { pick, type Lang, type LangMap } from "../lib/lang";
 
 // UI strings now live in the graph (source_data/ui.ttl, built by
 // scripts/3_build_ui_labels.py) as ct:UILabel individuals. This module resolves
